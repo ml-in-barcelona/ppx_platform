@@ -4,7 +4,7 @@ A ppx rewriter that keeps one OCaml codebase for native and
 [Melange](https://melange.re) builds. It picks the code that each target
 compiles and replaces browser-only code with a runtime failure on native.
 
-Extracted from `browser_ppx` in
+Extracted from
 [server-reason-react](https://github.com/ml-in-barcelona/server-reason-react).
 
 ## Install
