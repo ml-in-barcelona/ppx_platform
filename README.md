@@ -38,6 +38,8 @@ The ppx adds `ppx_platform.runtime` as a dependency of both builds.
 
 ## Syntax
 
+### match%platform
+
 `match%platform` picks one of two expressions at compile time. The cases are
 `Server` (native) and `Client` (Melange), also accepted as `Runtime.Server` and
 `Runtime.Client`. In Reason, write `switch%platform`.
@@ -62,8 +64,17 @@ let storage = In_memory.make ()
 let storage = Local_storage.make ()
 ```
 
-`[@platform js]` and `[@platform native]` do the same for whole items. The ppx
-removes the item from the other target:
+This lets one codebase:
+
+1. Behave differently on each target where it must, for example store data in
+   memory on the server and in `localStorage` in the browser.
+2. Use modules that exist on one target only. In the example above,
+   `Local_storage` does not exist on native. Native never compiles the `Client`
+   branch, so the native build does not need it.
+
+### [@platform js] / [@platform native]
+
+For modules and other top-level items. The item stays on one target only:
 
 ```ocaml
 include struct
@@ -75,16 +86,10 @@ include struct
 end [@@platform native]
 ```
 
-This lets one codebase:
+### browser_only
 
-1. Behave differently on each target where it must, for example store data in
-   memory on the server and in `localStorage` in the browser.
-2. Use modules that exist on one target only. In the example above,
-   `Local_storage` does not exist on native. Native never compiles the `Client`
-   branch, so the native build does not need it.
-
-`let%browser_only` keeps the function on Melange. On native, the body becomes a
-call to `Ppx_platform_runtime.fail_impossible_action_in_ssr`, which raises
+For functions and bindings that only work in the browser. `let%browser_only`
+keeps the function on Melange. On native, the body raises
 `Ppx_platform_runtime.Impossible_in_ssr`:
 
 ```ocaml
