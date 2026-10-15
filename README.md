@@ -38,6 +38,51 @@ The ppx adds `ppx_platform.runtime` as a dependency of both builds.
 
 ## Syntax
 
+`match%platform` picks one of two expressions at compile time. The cases are
+`Server` (native) and `Client` (Melange), also accepted as `Runtime.Server` and
+`Runtime.Client`. In Reason, write `switch%platform`.
+
+```ocaml
+let storage =
+  match%platform () with
+  | Server -> In_memory.make ()
+  | Client -> Local_storage.make ()
+```
+
+The ppx keeps only the branch for the current target, so each build compiles
+different code:
+
+```ocaml
+(* native *)
+let storage = In_memory.make ()
+```
+
+```ocaml
+(* Melange *)
+let storage = Local_storage.make ()
+```
+
+`[@platform js]` and `[@platform native]` do the same for whole items. The ppx
+removes the item from the other target:
+
+```ocaml
+include struct
+  type t = Js.Json.t
+end [@@platform js]
+
+include struct
+  type t = Yojson.Basic.t
+end [@@platform native]
+```
+
+This lets one codebase:
+
+1. Behave differently on each target where it must, for example store data in
+   memory on the server and in `localStorage` in the browser.
+2. Use modules that exist on one target only. In the example above,
+   `Local_storage` does not exist on native. Native never compiles the `Client`
+   branch, so the native build does not need it.
+
 `let%browser_only` keeps the function on Melange. On native, the body becomes a
 call to `Ppx_platform_runtime.fail_impossible_action_in_ssr`, which raises
 `Ppx_platform_runtime.Impossible_in_ssr`:
@@ -56,29 +101,6 @@ let on_click = [%browser_only fun event -> Js.log event]
 
 ```ocaml
 let window_size = (fun () -> (0, 0)) [@@browser_only]
-```
-
-`[@platform js]` and `[@platform native]` keep an item on one target only:
-
-```ocaml
-include struct
-  type t = Js.Json.t
-end [@@platform js]
-
-include struct
-  type t = Yojson.Basic.t
-end [@@platform native]
-```
-
-`switch%platform` picks one of two expressions at compile time. The cases are
-`Server` (native) and `Client` (Melange), also accepted as `Runtime.Server` and
-`Runtime.Client`:
-
-```ocaml
-let storage =
-  match%platform () with
-  | Server -> In_memory.make ()
-  | Client -> Local_storage.make ()
 ```
 
 ## Licence
