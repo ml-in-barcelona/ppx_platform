@@ -13,9 +13,6 @@ Extracted from
 opam install ppx_platform
 ```
 
-`melange` is a dependency of the package: the runtime library builds for both
-native and Melange.
-
 ## Setup
 
 Native library or executable:
