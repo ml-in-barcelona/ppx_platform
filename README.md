@@ -71,6 +71,9 @@ let api path = path
 let now () = Js.Date.now ()
 ```
 
+Both branches must have the same type, because the type checker sees only the
+one that remains for each target.
+
 This lets one codebase:
 
 1. Behave differently on each target where it must. In `api`, the server
@@ -93,6 +96,19 @@ include struct
 end [@@platform native]
 ```
 
+Two items with the same name are fine. Each build keeps only one of them, so
+the module exists on both targets:
+
+```ocaml
+module X = struct
+  type t = Js.Json.t
+end [@@platform js]
+
+module X = struct
+  type t = Yojson.Basic.t
+end [@@platform native]
+```
+
 ### browser_only
 
 For functions and let bindings that only get compiled by Melange and are meant
@@ -104,6 +120,16 @@ for the browser. On native, the body becomes an expression that raises
 
 ```ocaml
 let%browser_only focus_input element = Webapi.Dom.HtmlElement.focus element
+```
+
+If native code calls it anyway, the exception is not caught and the program
+crashes. To give a fallback value instead, catch the exception:
+
+```ocaml
+let%browser_only window_width () = Webapi.Dom.(window |> Window.innerWidth)
+
+let width () =
+  try window_width () with Ppx_platform_runtime.Impossible_in_ssr _ -> 0
 ```
 
 `[%browser_only fun ...]` does the same for an expression:
