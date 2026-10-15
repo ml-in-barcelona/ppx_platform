@@ -66,8 +66,7 @@ let storage = Local_storage.make ()
 
 This lets one codebase:
 
-1. Behave differently on each target where it must, for example store data in
-   memory on the server and in `localStorage` in the browser.
+1. Behave differently on each target where it must.
 2. Use modules that exist on one target only. In the example above,
    `Local_storage` does not exist on native. Native never compiles the `Client`
    branch, so the native build does not need it.
@@ -88,9 +87,12 @@ end [@@platform native]
 
 ### browser_only
 
-For functions and bindings that only work in the browser. `let%browser_only`
-keeps the function on Melange. On native, the body raises
-`Ppx_platform_runtime.Impossible_in_ssr`:
+For functions and let bindings that only get compiled by Melange and are meant
+for the browser. On native, the body becomes an expression that raises
+`Ppx_platform_runtime.Impossible_in_ssr`, and the binding gets a
+`browser_only` alert. So native code that calls it outside another
+`let%browser_only` gets a compiler alert (an error with
+`-alert @browser_only`):
 
 ```ocaml
 let%browser_only focus_input element = Webapi.Dom.HtmlElement.focus element
