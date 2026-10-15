@@ -45,10 +45,15 @@ The ppx adds `ppx_platform.runtime` as a dependency of both builds.
 `Runtime.Client`. In Reason, write `switch%platform`.
 
 ```ocaml
-let storage =
+let api_url path =
   match%platform () with
-  | Server -> In_memory.make ()
-  | Client -> Local_storage.make ()
+  | Server -> Sys.getenv "API_URL" ^ path
+  | Client -> path
+
+let now_ms () =
+  match%platform () with
+  | Server -> Unix.gettimeofday () *. 1000.
+  | Client -> Js.Date.now ()
 ```
 
 The ppx keeps only the branch for the current target, so each build compiles
@@ -56,20 +61,23 @@ different code:
 
 ```ocaml
 (* native *)
-let storage = In_memory.make ()
+let api_url path = Sys.getenv "API_URL" ^ path
+let now_ms () = Unix.gettimeofday () *. 1000.
 ```
 
 ```ocaml
 (* Melange *)
-let storage = Local_storage.make ()
+let api_url path = path
+let now_ms () = Js.Date.now ()
 ```
 
 This lets one codebase:
 
-1. Behave differently on each target where it must.
-2. Use modules that exist on one target only. In the example above,
-   `Local_storage` does not exist on native. Native never compiles the `Client`
-   branch, so the native build does not need it.
+1. Behave differently on each target where it must. In `api_url`, the server
+   needs an absolute URL, and the browser can use a relative one.
+2. Use modules that exist on one target only. In `now_ms`, `Unix` does not
+   exist in Melange and `Js.Date` does not exist on native. Each build compiles
+   only its own branch, so neither needs the other's module.
 
 ### [@platform js] / [@platform native]
 
