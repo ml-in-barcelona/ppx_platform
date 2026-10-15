@@ -1,0 +1,4 @@
+(library
+ (name ppx_platform_runtime)
+ (modes :standard melange)
+ (public_name ppx_platform.runtime))

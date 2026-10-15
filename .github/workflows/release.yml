@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+    - '*'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+jobs:
+  release:
+    name: Release to opam
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use OCaml 5.4.0
+        uses: ocaml/setup-ocaml@v3.4.5
+        with:
+          ocaml-compiler: 5.4.0
+          dune-cache: false
+          opam-disable-sandboxing: true
+
+      - name: Install opam deps
+        run: make install
+
+      - name: Install dune-release
+        run: opam install dune-release -y
+
+      - name: Release
+        uses: davesnx/dune-release-action@v0.5.0
+        with:
+          packages: 'ppx_platform'
+          changelog: './CHANGES.md'
+          github-token: ${{ secrets.GH_TOKEN }}

@@ -1,0 +1,9 @@
+(library
+ (name ppx_platform)
+ (public_name ppx_platform)
+ (flags :standard -w -9)
+ (libraries ppxlib ppxlib.astlib)
+ (ppx_runtime_libraries ppx_platform.runtime)
+ (preprocess
+  (pps ppxlib.metaquot))
+ (kind ppx_rewriter))

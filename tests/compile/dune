@@ -1,0 +1,40 @@
+; The same source builds natively and with Melange. The ppx picks the code
+; of each target, and both builds link the runtime through ppx_runtime_libraries.
+
+(library
+ (name sample_native)
+ (modules sample_native)
+ (preprocess
+  (pps ppx_platform)))
+
+(rule
+ (copy sample.ml sample_native.ml))
+
+(rule
+ (copy sample.ml sample_js.ml))
+
+(library
+ (name sample_js)
+ (modes melange)
+ (modules sample_js)
+ (preprocess
+  (pps ppx_platform -- -js)))
+
+(melange.emit
+ (target out)
+ (modules)
+ (libraries sample_js)
+ (module_systems commonjs))
+
+(executable
+ (name check)
+ (modules check)
+ (libraries sample_native ppx_platform.runtime))
+
+(rule
+ (alias runtest)
+ (package ppx_platform)
+ (action
+  (with-stdout-to
+   check.output
+   (run ./check.exe))))

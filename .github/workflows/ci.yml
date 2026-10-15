@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+env:
+  OCAMLRUNPARAM: b
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+jobs:
+  build:
+    name: Build and test
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+        ocaml-compiler:
+          - 5.4.0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use OCaml ${{ matrix.ocaml-compiler }}
+        uses: ocaml/setup-ocaml@v3.4.5
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-compiler }}
+          dune-cache: false
+          opam-disable-sandboxing: true
+
+      - name: Install opam deps
+        run: make install
+
+      - name: Build
+        run: make build
+
+      - name: Check formatting
+        run: make format-check
+
+      - name: Run tests
+        run: make test
+
+      - name: Install dune-release
+        if: matrix.os == 'ubuntu-latest'
+        run: opam install dune-release -y
+
+      - name: Lint
+        if: matrix.os == 'ubuntu-latest'
+        uses: davesnx/dune-release-action/lint@v0.5.0
+        with:
+          packages: 'ppx_platform'
