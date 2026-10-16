@@ -1,6 +1,6 @@
 # Changes
 
-## Unreleased
+## 0.2.0
 
 - Add `Native` and `Melange` cases to `match%platform` / `switch%platform`. `Server`, `Client`, `Runtime.Server` and
   `Runtime.Client` still work and can be mixed with the new cases.
