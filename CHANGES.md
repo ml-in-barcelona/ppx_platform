@@ -1,5 +1,14 @@
 # Changes
 
+## Unreleased
+
+- Add `Native` and `Melange` cases to `match%platform` / `switch%platform`. `Server`, `Client`, `Runtime.Server` and
+  `Runtime.Client` still work and can be mixed with the new cases.
+- Add `[@melange_only]` / `[@@melange_only]`, `let%melange_only` and `[%melange_only ...]`, the new names of
+  `[@browser_only]` / `[@platform js]` and `browser_only`. Native code gets a `melange_only` alert, not `browser_only`.
+- Add `[@native_only]` / `[@@native_only]`, the new name of `[@platform native]`.
+- The old names keep working in this release and will be removed in 1.0.0.
+
 ## 0.1.0
 
 Initial release, extracted from `browser_ppx` in
