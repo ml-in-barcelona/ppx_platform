@@ -1,11 +1,5 @@
 # Changes
 
-## Unreleased
-
-- Removed names give an error again, until 1.0.0, so a migration finds every leftover: `%browser_only`, `[@browser_only]`,
-  `[@platform js]`, `[@platform native]`, and `Server` / `Client` / `Runtime.Server` / `Runtime.Client` in
-  `match%platform` / `switch%platform`. Each error names the replacement. Without it, a removed attribute was ignored.
-
 ## 0.3.0
 
 - Breaking: the runtime module `Ppx_platform_runtime` is now `Ppx_platform`. `exception Impossible_in_ssr of string` is
@@ -13,7 +7,8 @@
   hint and the call stack to stderr only when backtraces are on (`OCAMLRUNPARAM=b` or `Printexc.record_backtrace true`),
   then raises. The library name of the ppx is now `ppx_platform_ppx`. The public names `ppx_platform` and
   `ppx_platform.runtime` do not change.
-- Breaking: remove the old names. `ppx_platform` no longer handles them. Replace each one as follows:
+- Breaking: remove the old names. Until 1.0.0, each one is an error that names its replacement, so a migration finds
+  every leftover. Replace each one as follows:
 
   | Removed                                                                      | Use                                   |
   | ---------------------------------------------------------------------------- | ------------------------------------- |
