@@ -1,5 +1,11 @@
 # Changes
 
+## Unreleased
+
+- Removed names give an error again, until 1.0.0, so a migration finds every leftover: `%browser_only`, `[@browser_only]`,
+  `[@platform js]`, `[@platform native]`, and `Server` / `Client` / `Runtime.Server` / `Runtime.Client` in
+  `match%platform` / `switch%platform`. Each error names the replacement. Without it, a removed attribute was ignored.
+
 ## 0.3.0
 
 - Breaking: the runtime module `Ppx_platform_runtime` is now `Ppx_platform`. `exception Impossible_in_ssr of string` is

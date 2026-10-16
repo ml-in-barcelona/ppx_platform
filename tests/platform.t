@@ -196,3 +196,107 @@ ppxlib runs only one handler for a duplicated flag.
   $ ./standalone.exe -impl mixed.ml -melange 2>&1 | head -2
   ./standalone.exe: unknown option '-melange'.
   standalone.exe [extra_args] [<files>]
+
+Removed names are errors that name the replacement. The first one stops the
+preprocessing of an attribute.
+
+  $ cat > removed_switch.ml << EOF
+  > let a = match%platform () with Server -> 1 | Melange -> 2
+  > let b = match%platform () with Native -> 1 | Client -> 2
+  > let c = match%platform () with Runtime.Server -> 1 | Runtime.Client -> 2
+  > EOF
+
+  $ ./standalone.exe -impl removed_switch.ml | ocamlformat - --enable-outside-detected-project --impl
+  let a =
+    [%ocaml.error "[ppx_platform] `Server` was removed in 0.3.0, use `Native`"]
+  
+  let b =
+    [%ocaml.error "[ppx_platform] `Client` was removed in 0.3.0, use `Melange`"]
+  
+  let c =
+    [%ocaml.error "[ppx_platform] `Server` was removed in 0.3.0, use `Native`"]
+
+  $ cat > removed_ext.ml << EOF
+  > let%browser_only f x = x
+  > let g = [%browser_only fun x -> x]
+  > [%%browser_only let h x = x]
+  > EOF
+
+  $ ./standalone.exe -impl removed_ext.ml | ocamlformat - --enable-outside-detected-project --impl
+  [%%ocaml.error
+  "[ppx_platform] %browser_only was removed in 0.3.0, use %melange_only"]
+  
+  let g =
+    [%ocaml.error
+      "[ppx_platform] %browser_only was removed in 0.3.0, use %melange_only"]
+  
+  [%%ocaml.error
+  "[ppx_platform] %browser_only was removed in 0.3.0, use %melange_only"]
+
+  $ for attr in "@@browser_only" "@@platform js" "@@platform native" "@@platform other"; do
+  >   echo "let x = 1 [$attr]" > removed_attr.ml
+  >   ./standalone.exe -impl removed_attr.ml
+  > done
+  File "removed_attr.ml", line 1, characters 10-26:
+  1 | let x = 1 [@@browser_only]
+                ^^^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@browser_only] was removed in 0.3.0, use [@melange_only]
+  File "removed_attr.ml", line 1, characters 10-25:
+  1 | let x = 1 [@@platform js]
+                ^^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@platform js] was removed in 0.3.0, use [@melange_only]
+  File "removed_attr.ml", line 1, characters 10-29:
+  1 | let x = 1 [@@platform native]
+                ^^^^^^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@platform native] was removed in 0.3.0, use [@native_only]
+  File "removed_attr.ml", line 1, characters 10-28:
+  1 | let x = 1 [@@platform other]
+                ^^^^^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@platform ...] was removed in 0.3.0, use [@melange_only] or [@native_only]
+  [1]
+
+  $ for attr in "@browser_only" "@platform js"; do
+  >   echo "let x = (1 [$attr])" > removed_attr.ml
+  >   ./standalone.exe -impl removed_attr.ml
+  > done
+  File "removed_attr.ml", line 1, characters 11-26:
+  1 | let x = (1 [@browser_only])
+                 ^^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@browser_only] was removed in 0.3.0, use [@melange_only]
+  File "removed_attr.ml", line 1, characters 11-25:
+  1 | let x = (1 [@platform js])
+                 ^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@platform js] was removed in 0.3.0, use [@melange_only]
+  [1]
+
+  $ echo "type t = { a : int [@platform js] }" > removed_field.ml
+  $ ./standalone.exe -impl removed_field.ml
+  File "removed_field.ml", line 1, characters 19-33:
+  1 | type t = { a : int [@platform js] }
+                         ^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@platform js] was removed in 0.3.0, use [@melange_only]
+  [1]
+
+  $ echo "[@@@browser_only]" > removed_floating.ml
+  $ ./standalone.exe -impl removed_floating.ml
+  File "removed_floating.ml", line 1, characters 0-17:
+  1 | [@@@browser_only]
+      ^^^^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@browser_only] was removed in 0.3.0, use [@melange_only]
+  [1]
+
+  $ echo "val x : int [@@platform native]" > removed.mli
+  $ ./standalone.exe -intf removed.mli
+  File "removed.mli", line 1, characters 12-31:
+  1 | val x : int [@@platform native]
+                  ^^^^^^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@platform native] was removed in 0.3.0, use [@native_only]
+  [1]
+
+  $ echo "let x = 1 [@@platform js]" > removed_attr.ml
+  $ ./standalone.exe -impl removed_attr.ml -js
+  File "removed_attr.ml", line 1, characters 10-25:
+  1 | let x = 1 [@@platform js]
+                ^^^^^^^^^^^^^^^
+  Error: [ppx_platform] [@platform js] was removed in 0.3.0, use [@melange_only]
+  [1]
