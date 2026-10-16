@@ -41,19 +41,18 @@ The ppx adds `ppx_platform.runtime` as a dependency of both builds.
 ### match%platform
 
 `match%platform` picks one of two expressions at compile time. The cases are
-`Server` (native) and `Client` (Melange), also accepted as `Runtime.Server` and
-`Runtime.Client`. In Reason, write `switch%platform`.
+`Native` and `Melange`. In Reason, write `switch%platform`.
 
 ```ocaml
 let api path =
   match%platform () with
-  | Server -> Sys.getenv "API_URL" ^ path
-  | Client -> path
+  | Native -> Sys.getenv "API_URL" ^ path
+  | Melange -> path
 
 let now () =
   match%platform () with
-  | Server -> Unix.gettimeofday () *. 1000.
-  | Client -> Js.Date.now ()
+  | Native -> Unix.gettimeofday () *. 1000.
+  | Melange -> Js.Date.now ()
 ```
 
 The ppx keeps only the branch for the current target, so each build compiles
@@ -82,18 +81,18 @@ This lets one codebase:
    exist in Melange and `Js.Date` does not exist on native. Each build compiles
    only its own branch, so neither needs the other's module.
 
-### [@platform js] / [@platform native]
+### [@melange_only] / [@native_only]
 
 For modules and other top-level items. The item stays on one target only:
 
 ```ocaml
-include struct
+include [@melange_only] struct
   type t = Js.Json.t
-end [@@platform js]
+end
 
-include struct
+include [@native_only] struct
   type t = Yojson.Basic.t
-end [@@platform native]
+end
 ```
 
 Two items with the same name are fine. Each build keeps only one of them, so
@@ -102,46 +101,46 @@ the module exists on both targets:
 ```ocaml
 module X = struct
   type t = Js.Json.t
-end [@@platform js]
+end [@@melange_only]
 
 module X = struct
   type t = Yojson.Basic.t
-end [@@platform native]
+end [@@native_only]
 ```
 
-### browser_only
+### melange_only
 
 For functions and let bindings that only get compiled by Melange and are meant
 for the browser. On native, the body becomes an expression that raises
 `Ppx_platform_runtime.Impossible_in_ssr`, and the binding gets a
-`browser_only` alert. So native code that calls it outside another
-`let%browser_only` gets a compiler alert (an error with
-`-alert @browser_only`):
+`melange_only` alert. So native code that calls it outside another
+`let%melange_only` gets a compiler alert (an error with
+`-alert @melange_only`):
 
 ```ocaml
-let%browser_only focus_input element = Webapi.Dom.HtmlElement.focus element
+let%melange_only focus_input element = Webapi.Dom.HtmlElement.focus element
 ```
 
 If native code calls it anyway, the exception is not caught and the program
 crashes. To give a fallback value instead, catch the exception:
 
 ```ocaml
-let%browser_only window_width () = Webapi.Dom.(window |> Window.innerWidth)
+let%melange_only window_width () = Webapi.Dom.(window |> Window.innerWidth)
 
 let width () =
   try window_width () with Ppx_platform_runtime.Impossible_in_ssr _ -> 0
 ```
 
-`[%browser_only fun ...]` does the same for an expression:
+`[%melange_only fun ...]` does the same for an expression:
 
 ```ocaml
-let on_click = [%browser_only fun event -> Js.log event]
+let on_click = [%melange_only fun event -> Js.log event]
 ```
 
-`[@browser_only]` removes an item or a record field on native:
+`[@melange_only]` removes an item or a record field on native:
 
 ```ocaml
-let window_size = (fun () -> (0, 0)) [@@browser_only]
+let window_size = (fun () -> (0, 0)) [@@melange_only]
 ```
 
 ## Licence

@@ -5,22 +5,37 @@ type target = Native | Js
 
 let mode = ref Native
 let browser_ppx = "browser_ppx"
-let browser_only = "browser_only"
 let platform_tag = "platform"
-let is_platform_tag str = String.equal str browser_ppx || String.equal str browser_only || String.equal str platform_tag
+
+(* The first name of each list is the current one, the rest are old names kept until 1.0.0. *)
+let melange_only_names = [ "melange_only"; "browser_only" ]
+let native_only_names = [ "native_only" ]
+let is_old_name name = String.equal name "browser_only"
+
+let is_platform_tag str =
+  String.equal str browser_ppx || String.equal str platform_tag || List.mem str melange_only_names
+  || List.mem str native_only_names
+
+(* Old names keep their original error and alert text, so existing messages and alert suppressions don't change. *)
+let error_prefix name = if is_old_name name then "browser_ppx" else "ppx_platform"
 
 module Platform = struct
   let pattern = Ast_pattern.(__')
 
   let collect_expressions ~loc first second =
     match (first.pc_lhs.ppat_desc, second.pc_lhs.ppat_desc) with
-    | ( Ppat_construct ({ txt = Lident "Server" | Ldot (Lident "Runtime", "Server"); _ }, _),
-        Ppat_construct ({ txt = Lident "Client" | Ldot (Lident "Runtime", "Client"); _ }, _) ) ->
+    | ( Ppat_construct ({ txt = Lident ("Server" | "Native") | Ldot (Lident "Runtime", "Server"); _ }, _),
+        Ppat_construct ({ txt = Lident ("Client" | "Melange") | Ldot (Lident "Runtime", "Client"); _ }, _) ) ->
         Ok (first.pc_rhs, second.pc_rhs)
-    | ( Ppat_construct ({ txt = Lident "Client" | Ldot (Lident "Runtime", "Client"); _ }, _),
-        Ppat_construct ({ txt = Lident "Server" | Ldot (Lident "Runtime", "Server"); _ }, _) ) ->
+    | ( Ppat_construct ({ txt = Lident ("Client" | "Melange") | Ldot (Lident "Runtime", "Client"); _ }, _),
+        Ppat_construct ({ txt = Lident ("Server" | "Native") | Ldot (Lident "Runtime", "Server"); _ }, _) ) ->
         Ok (second.pc_rhs, first.pc_rhs)
-    | _ -> Error [%expr [%ocaml.error "[browser_only] switch%platform requires 2 cases: `Server` and `Client`"]]
+    | _ ->
+        Error
+          [%expr
+            [%ocaml.error
+              "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange` (the old names `Server` and \
+               `Client` also work)"]]
 
   let switch_platform_requires_a_match ~loc =
     [%expr [%ocaml.error "[browser_ppx] switch%platform requires a match expression"]]
@@ -67,14 +82,18 @@ let rec last_expr_to_raise_impossible ~loc original_name expr =
 module Browser_only = struct
   let get_function_name pattern = match pattern with Ppat_var { txt = name; _ } -> name | _ -> "<unkwnown>"
 
-  let error_only_works_on ~loc =
-    [%expr
-      [%ocaml.error
-        "[browser_ppx] browser_only works on function definitions. For other cases, use switch%platform or feel free \
-         to open an issue in https://github.com/ml-in-barcelona/ppx_platform."]]
+  let error_only_works_on ~name ~loc =
+    let message =
+      Printf.sprintf
+        "[%s] %s works on function definitions. For other cases, use switch%%platform or feel free to open an issue in \
+         https://github.com/ml-in-barcelona/ppx_platform."
+        (error_prefix name) name
+    in
+    [%expr [%ocaml.error [%e Builder.estring ~loc message]]]
 
-  let remove_alert_browser_only ~loc =
-    Builder.attribute ~loc ~name:{ txt = "alert"; loc } ~payload:(PStr [ [%stri "-browser_only"] ])
+  let remove_alert_only ~name ~loc =
+    Builder.attribute ~loc ~name:{ txt = "alert"; loc }
+      ~payload:(PStr [ Builder.pstr_eval ~loc (Builder.estring ~loc ("-" ^ name)) [] ])
 
   let browser_only_fun ~loc arg_label pattern expression =
     let stringified = Ppxlib.Pprintast.string_of_expression expression in
@@ -85,7 +104,7 @@ module Browser_only = struct
     in
     { fn with pexp_attributes = expression.pexp_attributes }
 
-  let browser_only_value_binding pattern expression =
+  let browser_only_value_binding ~name pattern expression =
     let loc = pattern.ppat_loc in
     match pattern with
     | [%pat? ()] -> Builder.value_binding ~loc ~pat:pattern ~expr:[%expr ()]
@@ -97,17 +116,17 @@ module Browser_only = struct
             let function_name = get_function_name pattern.ppat_desc in
             let expr = last_expr_to_raise_impossible ~loc function_name expression in
             let vb = Builder.value_binding ~loc ~pat:pattern ~expr in
-            { vb with pvb_attributes = [ remove_alert_browser_only ~loc ] }
+            { vb with pvb_attributes = [ remove_alert_only ~name ~loc ] }
         | Pexp_function ({ pparam_desc = Pparam_val _; _ } :: _, _, Pfunction_body _) ->
             let function_name = get_function_name pattern.ppat_desc in
             let expr = last_expr_to_raise_impossible ~loc function_name expression in
             let vb = Builder.value_binding ~loc ~pat:pattern ~expr in
-            { vb with pvb_attributes = [ remove_alert_browser_only ~loc ] }
-        | _ -> Builder.value_binding ~loc ~pat:pattern ~expr:(error_only_works_on ~loc))
+            { vb with pvb_attributes = [ remove_alert_only ~name ~loc ] }
+        | _ -> Builder.value_binding ~loc ~pat:pattern ~expr:(error_only_works_on ~name ~loc))
 
   let extractor_single_payload = Ast_pattern.(single_expr_payload __)
 
-  let expression_handler ~ctxt payload =
+  let expression_handler ~name ~ctxt payload =
     let replace_fun_body_with_raise_impossible ~loc pexp_desc =
       match pexp_desc with
       | Pexp_constraint
@@ -130,11 +149,13 @@ module Browser_only = struct
       | Pexp_let (rec_flag, value_bindings, expression) ->
           let pexp_let =
             Builder.pexp_let ~loc rec_flag
-              (List.map (fun binding -> browser_only_value_binding binding.pvb_pat binding.pvb_expr) value_bindings)
+              (List.map
+                 (fun binding -> browser_only_value_binding ~name binding.pvb_pat binding.pvb_expr)
+                 value_bindings)
               expression
           in
           [%expr [%e pexp_let]]
-      | _ -> error_only_works_on ~loc
+      | _ -> error_only_works_on ~name ~loc
     in
     match !mode with
     | Js -> payload
@@ -142,37 +163,45 @@ module Browser_only = struct
         let loc = Expansion_context.Extension.extension_point_loc ctxt in
         replace_fun_body_with_raise_impossible ~loc payload.pexp_desc
 
-  let expression_rule =
+  let expression_rule name =
     Context_free.Rule.extension
-      (Extension.V3.declare "browser_only" Extension.Context.expression extractor_single_payload expression_handler)
+      (Extension.V3.declare name Extension.Context.expression extractor_single_payload (expression_handler ~name))
 
   (* Generates a structure_item with a value binding with a pattern and an expression with all the alerts and warnings *)
-  let make_vb_with_browser_only ~loc ?type_constraint pattern expression =
-    match type_constraint with
-    | Some type_constraint ->
-        [%stri
-          let[@warning "-27-32"] ([%p pattern] :
-                                   ([%t type_constraint]
-                                   [@alert
-                                     browser_only
-                                       "This expression is marked to only run on the browser where JavaScript can run. \
-                                        You can only use it inside a let%browser_only function."])) =
-            [%e expression] [@alert "-browser_only"]]
-    | None ->
-        [%stri
-          let[@warning "-27-32"] ([%p pattern]
-                                  [@alert
-                                    browser_only
-                                      "This expression is marked to only run on the browser where JavaScript can run. \
-                                       You can only use it inside a let%browser_only function."]) =
-            [%e expression] [@alert "-browser_only"]]
+  let make_vb_with_browser_only ~name ~loc ?type_constraint pattern expression =
+    let alert_message =
+      Printf.sprintf
+        "This expression is marked to only run on the browser where JavaScript can run. You can only use it inside a \
+         let%%%s function."
+        name
+    in
+    let alert =
+      Builder.attribute ~loc ~name:{ txt = "alert"; loc }
+        ~payload:
+          (PStr
+             [
+               Builder.pstr_eval ~loc
+                 (Builder.pexp_apply ~loc (Builder.evar ~loc name) [ (Nolabel, Builder.estring ~loc alert_message) ])
+                 [];
+             ])
+    in
+    let expression =
+      { expression with pexp_attributes = expression.pexp_attributes @ [ remove_alert_only ~name ~loc ] }
+    in
+    let pattern =
+      match type_constraint with
+      | Some type_constraint ->
+          Builder.ppat_constraint ~loc pattern { type_constraint with ptyp_attributes = [ alert ] }
+      | None -> { pattern with ppat_attributes = [ alert ] }
+    in
+    [%stri let[@warning "-27-32"] [%p pattern] = [%e expression]]
 
   let extractor_vb =
     let open Ast_pattern in
     let extractor_in_let = pstr_value __ (value_binding ~pat:__ ~expr:__ ~constraint_:drop ^:: nil) in
     pstr @@ extractor_in_let ^:: nil
 
-  let structure_item_handler ~ctxt rec_flag pattern expression =
+  let structure_item_handler ~name ~ctxt rec_flag pattern expression =
     let loc = Expansion_context.Extension.extension_point_loc ctxt in
     let do_nothing rec_flag =
       match rec_flag with
@@ -199,7 +228,7 @@ module Browser_only = struct
               (last_expr_to_raise_impossible ~loc original_function_name expr)
           in
           let item = { fn with pexp_attributes = expr.pexp_attributes } in
-          make_vb_with_browser_only ~loc ~type_constraint pattern item
+          make_vb_with_browser_only ~name ~loc ~type_constraint pattern item
       | Pexp_function
           ({ pparam_desc = Pparam_val (arg_label, _arg_expression, fun_pattern); _ } :: _, _, Pfunction_body expr) ->
           let original_function_name = get_function_name pattern.ppat_desc in
@@ -209,7 +238,7 @@ module Browser_only = struct
               (last_expr_to_raise_impossible ~loc original_function_name expr)
           in
           let item = { fn with pexp_attributes = expr.pexp_attributes } in
-          make_vb_with_browser_only ~loc pattern item
+          make_vb_with_browser_only ~name ~loc pattern item
       | Pexp_function ([], _, Pfunction_cases (_cases, _, _)) ->
           (* Because pexp_function with cases doesn't have a pattern, neither a label, we construct an empty pattern and use it to generate the vb *)
           let original_function_name = get_function_name pattern.ppat_desc in
@@ -219,14 +248,14 @@ module Browser_only = struct
               (last_expr_to_raise_impossible ~loc original_function_name expression)
           in
           let item = { fn with pexp_attributes = expression.pexp_attributes } in
-          make_vb_with_browser_only ~loc pattern item
+          make_vb_with_browser_only ~name ~loc pattern item
       | Pexp_ident { txt = _longident; loc } ->
           let item = [%expr Obj.magic ()] in
-          make_vb_with_browser_only ~loc pattern item
-      | Pexp_newtype (name, expr) ->
-          let original_function_name = name.txt in
+          make_vb_with_browser_only ~name ~loc pattern item
+      | Pexp_newtype (type_name, expr) ->
+          let original_function_name = type_name.txt in
           let item = last_expr_to_raise_impossible ~loc original_function_name expr in
-          make_vb_with_browser_only ~loc pattern item
+          make_vb_with_browser_only ~name ~loc pattern item
       | _expr -> do_nothing rec_flag
     in
 
@@ -235,25 +264,36 @@ module Browser_only = struct
     | Js -> do_nothing rec_flag
     | Native -> add_browser_only_alert expression
 
-  let structure_item_rule =
+  let structure_item_rule name =
     Context_free.Rule.extension
-      (Extension.V3.declare "browser_only" Extension.Context.structure_item extractor_vb structure_item_handler)
+      (Extension.V3.declare name Extension.Context.structure_item extractor_vb (structure_item_handler ~name))
+
+  let rules = List.concat_map (fun name -> [ expression_rule name; structure_item_rule name ]) melange_only_names
 end
 
 module Preprocess = struct
   (* This module is heavily based on leostera `config.ml` PPX:
      https://github.com/ocaml-sys/config.ml/blob/d248987cc1795de99d3735c06635dbd355d4d642/config/cfg_ppx.ml*)
 
+  let is_payload_ident ident attr =
+    match attr.attr_payload with
+    | PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident name; _ }; _ }, []); _ } ] ->
+        String.equal name ident
+    | _ -> false
+
   let eval_attr attr =
-    if not (is_platform_tag attr.attr_name.txt) then `keep
-    else
-      match (attr.attr_name.txt, attr.attr_payload, !mode) with
-      | "browser_only", _, Native
-      | "platform", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident "js" } }, []); _ } ], Native
-      | "platform", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident "native" } }, []); _ } ], Js
-        ->
-          `drop
-      | _ -> `keep
+    let name = attr.attr_name.txt in
+    let melange_only = List.mem name melange_only_names || (name = platform_tag && is_payload_ident "js" attr) in
+    let native_only = List.mem name native_only_names || (name = platform_tag && is_payload_ident "native" attr) in
+    match !mode with Native when melange_only -> `drop | Js when native_only -> `drop | _ -> `keep
+
+  let expression_error ~loc attrs =
+    let name =
+      match List.find_opt (fun attr -> eval_attr attr = `drop) attrs with Some attr -> attr.attr_name.txt | None -> ""
+    in
+    [%expr
+      [%ocaml.error
+        [%e Builder.estring ~loc (Printf.sprintf "Don't use %s on expressions, use switch%%platform instead" name)]]]
 
   let rec should_keep attrs =
     match attrs with [] -> `keep | attr :: attrs -> if eval_attr attr = `drop then `drop else should_keep attrs
@@ -370,11 +410,8 @@ module Preprocess = struct
         match expr.pexp_desc with
         | Pexp_let (_, [ { pvb_attributes = attrs; _ } ], _) ->
             let loc = expr.pexp_loc in
-            if should_keep attrs = `keep then expr
-            else [%expr [%ocaml.error "Don't use browser_only on expressions, use switch%platform instead"]]
-        | _ ->
-            if should_keep expr.pexp_attributes = `keep then expr
-            else [%expr [%ocaml.error "Don't use browser_only on expressions, use switch%platform instead"]]
+            if should_keep attrs = `keep then expr else expression_error ~loc attrs
+        | _ -> if should_keep expr.pexp_attributes = `keep then expr else expression_error ~loc expr.pexp_attributes
 
       method! pattern pat =
         match pat.ppat_desc with
@@ -390,7 +427,7 @@ end
 
 let () =
   Driver.add_arg "-js" (Unit (fun () -> mode := Js)) ~doc:"preprocess for js build";
-  let rules = [ Browser_only.expression_rule; Browser_only.structure_item_rule; Platform.rule ] in
+  let rules = Platform.rule :: Browser_only.rules in
   Driver.V2.register_transformation browser_ppx ~rules
     ~impl:(fun _ -> Preprocess.traverse#structure)
     ~intf:(fun _ -> Preprocess.traverse#signature)
