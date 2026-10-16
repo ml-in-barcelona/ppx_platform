@@ -43,23 +43,20 @@ Without -js flag, the compilation to native replaces the expression with a raise
   $ cat output.ml
   let make () =
     let fun_value_binding_pexp_fun_2arg evt =
-      Ppx_platform_runtime.fail_impossible_action_in_ssr
-        "fun_value_binding_pexp_fun_2arg"
+      Ppx_platform.fail_melange_only "fun_value_binding_pexp_fun_2arg"
         [@@alert "-melange_only"]
     in
     let fun_value_binding_pexp_fun_default_expr ?evt =
-      Ppx_platform_runtime.fail_impossible_action_in_ssr
-        "fun_value_binding_pexp_fun_default_expr"
+      Ppx_platform.fail_melange_only "fun_value_binding_pexp_fun_default_expr"
         [@@alert "-melange_only"]
     in
     let fun_value_binding_pexp_fun_2arg evt =
-      Ppx_platform_runtime.fail_impossible_action_in_ssr
-        "fun_value_binding_pexp_fun_2arg"
+      Ppx_platform.fail_melange_only "fun_value_binding_pexp_fun_2arg"
         [@@alert "-melange_only"]
     in
     ()
 
-Replace Ppx_platform_runtime.fail_impossible_action_in_ssr with print_endline so ocamlc can compile it without the runtime library dependency
-  $ sed "s/Ppx_platform_runtime.fail_impossible_action_in_ssr/print_endline/g" output.ml > output.ml
+Replace Ppx_platform.fail_melange_only with print_endline so ocamlc can compile it without the runtime library dependency
+  $ sed "s/Ppx_platform.fail_melange_only/print_endline/g" output.ml > output.ml
 
   $ ocamlc -c output.ml

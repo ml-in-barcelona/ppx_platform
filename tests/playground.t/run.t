@@ -76,5 +76,5 @@
     [@alert "-melange_only"]
     (
       (~abortController, ~encoding=?, pathname, req, input) =>
-        Ppx_platform_runtime.fail_impossible_action_in_ssr("makeQuery")
+        Ppx_platform.fail_melange_only("makeQuery")
     );
