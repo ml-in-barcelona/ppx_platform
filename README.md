@@ -86,13 +86,13 @@ This lets one codebase:
 For modules and other top-level items. The item stays on one target only:
 
 ```ocaml
-include struct
+include [@melange_only] struct
   type t = Js.Json.t
-end [@@melange_only]
+end
 
-include struct
+include [@native_only] struct
   type t = Yojson.Basic.t
-end [@@native_only]
+end
 ```
 
 Two items with the same name are fine. Each build keeps only one of them, so
@@ -142,27 +142,6 @@ let on_click = [%melange_only fun event -> Js.log event]
 ```ocaml
 let window_size = (fun () -> (0, 0)) [@@melange_only]
 ```
-
-## Old names
-
-The old names keep working and behave the same. They will be removed in
-1.0.0. You can mix old and new names in one file, and in `match%platform` you
-can mix `Native` with `Client` or `Melange` with `Server`.
-
-| Old | New |
-| --- | --- |
-| `Server` / `Client` (also `Runtime.Server` / `Runtime.Client`) | `Native` / `Melange` |
-| `[@platform js]`, `[@browser_only]` | `[@melange_only]` |
-| `[@platform native]` | `[@native_only]` |
-| `let%browser_only`, `[%browser_only ...]` | `let%melange_only`, `[%melange_only ...]` |
-
-The generated alert has the name you used: `browser_only` for the old names and
-`melange_only` for the new ones. Suppress it with `[@alert "-browser_only"]` or
-`[@alert "-melange_only"]` to match.
-
-The `-js` flag has no new name. `server-reason-react.ppx` already registers
-`-melange`, and ppxlib runs only one handler when two ppxes register the same
-flag.
 
 ## Licence
 
