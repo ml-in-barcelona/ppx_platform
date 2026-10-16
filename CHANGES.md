@@ -2,8 +2,7 @@
 
 ## Unreleased
 
-- Breaking: remove the old names. Using one is a compile error that names the replacement
-  (`[ppx_platform] [@platform js] was removed in 0.3.0, use [@melange_only]`).
+- Breaking: remove the old names. `ppx_platform` no longer handles them. Replace each one as follows:
 
   | Removed                                                                      | Use                                   |
   | ---------------------------------------------------------------------------- | ------------------------------------- |

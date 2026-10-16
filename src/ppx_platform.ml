@@ -8,38 +8,17 @@ let melange_only = "melange_only"
 let native_only = "native_only"
 let is_platform_tag name = String.equal name melange_only || String.equal name native_only
 
-(* Each removed name maps to its replacement. Without these errors, a removed attribute would be ignored silently and a
-   removed extension would only report "Uninterpreted extension". *)
-let removed_cases = [ ("Server", "Native"); ("Client", "Melange") ]
-
-let removed_message ~removed ~replacement =
-  Printf.sprintf "[ppx_platform] %s was removed in 0.3.0, use %s" removed replacement
-
 module Platform = struct
   let pattern = Ast_pattern.(__')
 
   let case_name case =
-    match case.pc_lhs.ppat_desc with
-    | Ppat_construct ({ txt = Lident name | Ldot (Lident "Runtime", (("Server" | "Client") as name)); _ }, _) ->
-        Some name
-    | _ -> None
+    match case.pc_lhs.ppat_desc with Ppat_construct ({ txt = Lident name; _ }, _) -> Some name | _ -> None
 
   let collect_expressions ~loc first second =
     match (case_name first, case_name second) with
     | Some "Native", Some "Melange" -> Ok (first.pc_rhs, second.pc_rhs)
     | Some "Melange", Some "Native" -> Ok (second.pc_rhs, first.pc_rhs)
-    | names ->
-        let removed_case name =
-          Option.bind name (fun name ->
-              Option.map (fun replacement -> (name, replacement)) (List.assoc_opt name removed_cases))
-        in
-        let message =
-          match List.find_map removed_case [ fst names; snd names ] with
-          | Some (removed, replacement) ->
-              removed_message ~removed:(Printf.sprintf "`%s`" removed) ~replacement:(Printf.sprintf "`%s`" replacement)
-          | None -> "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange`"
-        in
-        Error [%expr [%ocaml.error [%e Builder.estring ~loc message]]]
+    | _ -> Error [%expr [%ocaml.error "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange`"]]
 
   let switch_platform_requires_a_match ~loc =
     [%expr [%ocaml.error "[ppx_platform] switch%platform requires a match expression"]]
@@ -416,52 +395,9 @@ module Preprocess = struct
     end
 end
 
-module Removed = struct
-  let extension_rule context ~error =
-    Context_free.Rule.extension
-      (Extension.V3.declare "browser_only" context Ast_pattern.__ (fun ~ctxt _payload ->
-           let loc = Expansion_context.Extension.extension_point_loc ctxt in
-           error ~loc (removed_message ~removed:"%browser_only" ~replacement:"%melange_only")))
-
-  let rules =
-    [
-      extension_rule Extension.Context.expression ~error:(fun ~loc message ->
-          [%expr [%ocaml.error [%e Builder.estring ~loc message]]]);
-      extension_rule Extension.Context.structure_item ~error:(fun ~loc message ->
-          [%stri [%%ocaml.error [%e Builder.estring ~loc message]]]);
-    ]
-
-  let attribute_replacement attr =
-    match (attr.attr_name.txt, attr.attr_payload) with
-    | "browser_only", _ -> Some ("[@browser_only]", "[@melange_only]")
-    | "platform", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident "js"; _ }; _ }, []); _ } ] ->
-        Some ("[@platform js]", "[@melange_only]")
-    | "platform", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident "native"; _ }; _ }, []); _ } ]
-      ->
-        Some ("[@platform native]", "[@native_only]")
-    | "platform", _ -> Some ("[@platform ...]", "[@melange_only] or [@native_only]")
-    | _ -> None
-
-  (* An attribute can't carry an error node, so this one stops at the first removed attribute. *)
-  let reject =
-    object
-      inherit Ast_traverse.iter as super
-
-      method! attribute attr =
-        match attribute_replacement attr with
-        | Some (removed, replacement) ->
-            Location.raise_errorf ~loc:attr.attr_loc "%s" (removed_message ~removed ~replacement)
-        | None -> super#attribute attr
-    end
-end
-
 let () =
   Driver.add_arg "-js" (Unit (fun () -> mode := Js)) ~doc:"preprocess for js build";
-  let rules = (Platform.rule :: Melange_only.rules) @ Removed.rules in
+  let rules = Platform.rule :: Melange_only.rules in
   Driver.V2.register_transformation "ppx_platform" ~rules
-    ~impl:(fun _ structure ->
-      Removed.reject#structure structure;
-      Preprocess.traverse#structure structure)
-    ~intf:(fun _ signature ->
-      Removed.reject#signature signature;
-      Preprocess.traverse#signature signature)
+    ~impl:(fun _ structure -> Preprocess.traverse#structure structure)
+    ~intf:(fun _ signature -> Preprocess.traverse#signature signature)
