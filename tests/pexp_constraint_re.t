@@ -1,10 +1,10 @@
   $ cat > input.re << EOF
   > let make = () => {
-  >   let%browser_only discard: Js.Promise.t(unit) => unit = value => ignore(value);
+  >   let%melange_only discard: Js.Promise.t(unit) => unit = value => ignore(value);
   >   ();
   > };
   > 
-  > let%browser_only reifyStyle = (type a, x: 'a): (style(a), a) => {
+  > let%melange_only reifyStyle = (type a, x: 'a): (style(a), a) => {
   >     let isCanvasGradient = _ => false;
   >     let isCanvasPattern = _ => false;
   >     
@@ -52,7 +52,7 @@
 
   $ ./standalone.exe -impl input.ml | refmt --parse ml --print re
   let make = () => {
-    [@alert "-browser_only"]
+    [@alert "-melange_only"]
     let discard = value =>
       Ppx_platform_runtime.fail_impossible_action_in_ssr("discard");
     ();

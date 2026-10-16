@@ -1,10 +1,10 @@
   $ cat > input.re << EOF
-  > let%browser_only valueFromEvent = evt => React.Event.Form.target(evt)##value;
-  > let%browser_only getSortedWordCountsBrowserOnly = (words: array(string)): array((string, int)) => {
+  > let%melange_only valueFromEvent = evt => React.Event.Form.target(evt)##value;
+  > let%melange_only getSortedWordCountsBrowserOnly = (words: array(string)): array((string, int)) => {
   >   words->List.map->Js.log;
   > };
   > 
-  > let%browser_only renderToElementWithId = (~id="", component) => {
+  > let%melange_only renderToElementWithId = (~id="", component) => {
   >   switch (ReactDOM.querySelector("#" ++ id)) {
   >     | Some(node) =>
   >       let root = ReactDOM.Client.createRoot(node);
@@ -13,11 +13,11 @@
   >     };
   >   };
   > 
-  > let%browser_only getSortedWordCountsBrowserOnly = (words: array(string)): array((string, int)) => {
+  > let%melange_only getSortedWordCountsBrowserOnly = (words: array(string)): array((string, int)) => {
   >   words |> Js.log |> List.map;
   > };
   > 
-  > let%browser_only getSortedWordCountsBrowserOnly = (words: array(string)): array((string, int)) => {
+  > let%melange_only getSortedWordCountsBrowserOnly = (words: array(string)): array((string, int)) => {
   >   words
   >   ->Js.Array2.reduce(
   >     (acc, word) => {
@@ -75,58 +75,53 @@
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl
   let (valueFromEvent
        [@alert
-         browser_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%browser_only \
-            function."]) =
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun evt ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr "valueFromEvent")
-    [@alert "-browser_only"]
+    [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let (getSortedWordCountsBrowserOnly
        [@alert
-         browser_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%browser_only \
-            function."]) =
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr
       "getSortedWordCountsBrowserOnly")
-    [@alert "-browser_only"]
+    [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let (renderToElementWithId
        [@alert
-         browser_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%browser_only \
-            function."]) =
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun ?id component ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr "renderToElementWithId")
-    [@alert "-browser_only"]
+    [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let (getSortedWordCountsBrowserOnly
        [@alert
-         browser_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%browser_only \
-            function."]) =
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr
       "getSortedWordCountsBrowserOnly")
-    [@alert "-browser_only"]
+    [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let (getSortedWordCountsBrowserOnly
        [@alert
-         browser_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%browser_only \
-            function."]) =
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr
       "getSortedWordCountsBrowserOnly")
-    [@alert "-browser_only"]
+    [@alert "-melange_only"]
   [@@warning "-27-32"]

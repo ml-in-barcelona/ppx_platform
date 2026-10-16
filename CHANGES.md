@@ -1,5 +1,22 @@
 # Changes
 
+## Unreleased
+
+- Breaking: remove the old names. Using one is a compile error that names the replacement
+  (`[ppx_platform] [@platform js] was removed in 0.3.0, use [@melange_only]`).
+
+  | Removed                                                                      | Use                                   |
+  | ---------------------------------------------------------------------------- | ------------------------------------- |
+  | `let%browser_only`, `[%browser_only ...]`, `[%%browser_only ...]`            | `let%melange_only`, `[%melange_only ...]`, `[%%melange_only ...]` |
+  | `[@browser_only]`, `[@@browser_only]`, `[@platform js]`, `[@@platform js]`   | `[@melange_only]`, `[@@melange_only]` |
+  | `[@platform native]`, `[@@platform native]`                                  | `[@native_only]`, `[@@native_only]`   |
+  | `Server`, `Runtime.Server` in `match%platform` / `switch%platform`           | `Native`                              |
+  | `Client`, `Runtime.Client` in `match%platform` / `switch%platform`           | `Melange`                             |
+
+- Breaking: the `browser_only` alert is gone. Native code gets a `melange_only` alert with a new message: "This value only
+  exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform."
+- Error messages that said `[browser_ppx]` or `browser_only` now say `[ppx_platform]` and `melange_only`.
+
 ## 0.2.0
 
 - Add `Native` and `Melange` cases to `match%platform` / `switch%platform`. `Server`, `Client`, `Runtime.Server` and

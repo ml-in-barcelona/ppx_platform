@@ -4,41 +4,45 @@ module Builder = Ast_builder.Default
 type target = Native | Js
 
 let mode = ref Native
-let browser_ppx = "browser_ppx"
-let platform_tag = "platform"
+let melange_only = "melange_only"
+let native_only = "native_only"
+let is_platform_tag name = String.equal name melange_only || String.equal name native_only
 
-(* The first name of each list is the current one, the rest are old names kept until 1.0.0. *)
-let melange_only_names = [ "melange_only"; "browser_only" ]
-let native_only_names = [ "native_only" ]
-let is_old_name name = String.equal name "browser_only"
+(* Each removed name maps to its replacement. Without these errors, a removed attribute would be ignored silently and a
+   removed extension would only report "Uninterpreted extension". *)
+let removed_cases = [ ("Server", "Native"); ("Client", "Melange") ]
 
-let is_platform_tag str =
-  String.equal str browser_ppx || String.equal str platform_tag || List.mem str melange_only_names
-  || List.mem str native_only_names
-
-(* Old names keep their original error and alert text, so existing messages and alert suppressions don't change. *)
-let error_prefix name = if is_old_name name then "browser_ppx" else "ppx_platform"
+let removed_message ~removed ~replacement =
+  Printf.sprintf "[ppx_platform] %s was removed in 0.3.0, use %s" removed replacement
 
 module Platform = struct
   let pattern = Ast_pattern.(__')
 
+  let case_name case =
+    match case.pc_lhs.ppat_desc with
+    | Ppat_construct ({ txt = Lident name | Ldot (Lident "Runtime", (("Server" | "Client") as name)); _ }, _) ->
+        Some name
+    | _ -> None
+
   let collect_expressions ~loc first second =
-    match (first.pc_lhs.ppat_desc, second.pc_lhs.ppat_desc) with
-    | ( Ppat_construct ({ txt = Lident ("Server" | "Native") | Ldot (Lident "Runtime", "Server"); _ }, _),
-        Ppat_construct ({ txt = Lident ("Client" | "Melange") | Ldot (Lident "Runtime", "Client"); _ }, _) ) ->
-        Ok (first.pc_rhs, second.pc_rhs)
-    | ( Ppat_construct ({ txt = Lident ("Client" | "Melange") | Ldot (Lident "Runtime", "Client"); _ }, _),
-        Ppat_construct ({ txt = Lident ("Server" | "Native") | Ldot (Lident "Runtime", "Server"); _ }, _) ) ->
-        Ok (second.pc_rhs, first.pc_rhs)
-    | _ ->
-        Error
-          [%expr
-            [%ocaml.error
-              "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange` (the old names `Server` and \
-               `Client` also work)"]]
+    match (case_name first, case_name second) with
+    | Some "Native", Some "Melange" -> Ok (first.pc_rhs, second.pc_rhs)
+    | Some "Melange", Some "Native" -> Ok (second.pc_rhs, first.pc_rhs)
+    | names ->
+        let removed_case name =
+          Option.bind name (fun name ->
+              Option.map (fun replacement -> (name, replacement)) (List.assoc_opt name removed_cases))
+        in
+        let message =
+          match List.find_map removed_case [ fst names; snd names ] with
+          | Some (removed, replacement) ->
+              removed_message ~removed:(Printf.sprintf "`%s`" removed) ~replacement:(Printf.sprintf "`%s`" replacement)
+          | None -> "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange`"
+        in
+        Error [%expr [%ocaml.error [%e Builder.estring ~loc message]]]
 
   let switch_platform_requires_a_match ~loc =
-    [%expr [%ocaml.error "[browser_ppx] switch%platform requires a match expression"]]
+    [%expr [%ocaml.error "[ppx_platform] switch%platform requires a match expression"]]
 
   let handler ~ctxt:_ { txt = payload; loc } =
     match payload with
@@ -79,23 +83,20 @@ let rec last_expr_to_raise_impossible ~loc original_name expr =
       { fn with pexp_attributes = expr.pexp_attributes }
   | _ -> [%expr Ppx_platform_runtime.fail_impossible_action_in_ssr [%e Builder.estring ~loc original_name]]
 
-module Browser_only = struct
+module Melange_only = struct
   let get_function_name pattern = match pattern with Ppat_var { txt = name; _ } -> name | _ -> "<unkwnown>"
 
-  let error_only_works_on ~name ~loc =
-    let message =
-      Printf.sprintf
-        "[%s] %s works on function definitions. For other cases, use switch%%platform or feel free to open an issue in \
-         https://github.com/ml-in-barcelona/ppx_platform."
-        (error_prefix name) name
-    in
-    [%expr [%ocaml.error [%e Builder.estring ~loc message]]]
+  let error_only_works_on ~loc =
+    [%expr
+      [%ocaml.error
+        "[ppx_platform] melange_only works on function definitions. For other cases, use switch%platform or feel free \
+         to open an issue in https://github.com/ml-in-barcelona/ppx_platform."]]
 
-  let remove_alert_only ~name ~loc =
+  let remove_alert_only ~loc =
     Builder.attribute ~loc ~name:{ txt = "alert"; loc }
-      ~payload:(PStr [ Builder.pstr_eval ~loc (Builder.estring ~loc ("-" ^ name)) [] ])
+      ~payload:(PStr [ Builder.pstr_eval ~loc (Builder.estring ~loc ("-" ^ melange_only)) [] ])
 
-  let browser_only_fun ~loc arg_label pattern expression =
+  let melange_only_fun ~loc arg_label pattern expression =
     let stringified = Ppxlib.Pprintast.string_of_expression expression in
     let message = Builder.estring ~loc stringified in
     let fn =
@@ -104,7 +105,7 @@ module Browser_only = struct
     in
     { fn with pexp_attributes = expression.pexp_attributes }
 
-  let browser_only_value_binding ~name pattern expression =
+  let melange_only_value_binding pattern expression =
     let loc = pattern.ppat_loc in
     match pattern with
     | [%pat? ()] -> Builder.value_binding ~loc ~pat:pattern ~expr:[%expr ()]
@@ -116,17 +117,17 @@ module Browser_only = struct
             let function_name = get_function_name pattern.ppat_desc in
             let expr = last_expr_to_raise_impossible ~loc function_name expression in
             let vb = Builder.value_binding ~loc ~pat:pattern ~expr in
-            { vb with pvb_attributes = [ remove_alert_only ~name ~loc ] }
+            { vb with pvb_attributes = [ remove_alert_only ~loc ] }
         | Pexp_function ({ pparam_desc = Pparam_val _; _ } :: _, _, Pfunction_body _) ->
             let function_name = get_function_name pattern.ppat_desc in
             let expr = last_expr_to_raise_impossible ~loc function_name expression in
             let vb = Builder.value_binding ~loc ~pat:pattern ~expr in
-            { vb with pvb_attributes = [ remove_alert_only ~name ~loc ] }
-        | _ -> Builder.value_binding ~loc ~pat:pattern ~expr:(error_only_works_on ~name ~loc))
+            { vb with pvb_attributes = [ remove_alert_only ~loc ] }
+        | _ -> Builder.value_binding ~loc ~pat:pattern ~expr:(error_only_works_on ~loc))
 
   let extractor_single_payload = Ast_pattern.(single_expr_payload __)
 
-  let expression_handler ~name ~ctxt payload =
+  let expression_handler ~ctxt payload =
     let replace_fun_body_with_raise_impossible ~loc pexp_desc =
       match pexp_desc with
       | Pexp_constraint
@@ -139,7 +140,7 @@ module Browser_only = struct
               _;
             },
             type_constraint ) ->
-          let fn = browser_only_fun ~loc arg_label pattern expression in
+          let fn = melange_only_fun ~loc arg_label pattern expression in
           Builder.pexp_constraint ~loc { fn with pexp_attributes = expression.pexp_attributes } type_constraint
       | Pexp_function
           ({ pparam_desc = Pparam_val (arg_label, _arg_expression, pattern); _ } :: _, _, Pfunction_body expr) ->
@@ -149,13 +150,11 @@ module Browser_only = struct
       | Pexp_let (rec_flag, value_bindings, expression) ->
           let pexp_let =
             Builder.pexp_let ~loc rec_flag
-              (List.map
-                 (fun binding -> browser_only_value_binding ~name binding.pvb_pat binding.pvb_expr)
-                 value_bindings)
+              (List.map (fun binding -> melange_only_value_binding binding.pvb_pat binding.pvb_expr) value_bindings)
               expression
           in
           [%expr [%e pexp_let]]
-      | _ -> error_only_works_on ~name ~loc
+      | _ -> error_only_works_on ~loc
     in
     match !mode with
     | Js -> payload
@@ -163,17 +162,15 @@ module Browser_only = struct
         let loc = Expansion_context.Extension.extension_point_loc ctxt in
         replace_fun_body_with_raise_impossible ~loc payload.pexp_desc
 
-  let expression_rule name =
+  let expression_rule =
     Context_free.Rule.extension
-      (Extension.V3.declare name Extension.Context.expression extractor_single_payload (expression_handler ~name))
+      (Extension.V3.declare melange_only Extension.Context.expression extractor_single_payload expression_handler)
 
   (* Generates a structure_item with a value binding with a pattern and an expression with all the alerts and warnings *)
-  let make_vb_with_browser_only ~name ~loc ?type_constraint pattern expression =
+  let make_vb_with_melange_only ~loc ?type_constraint pattern expression =
     let alert_message =
-      Printf.sprintf
-        "This expression is marked to only run on the browser where JavaScript can run. You can only use it inside a \
-         let%%%s function."
-        name
+      "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of \
+       match%platform."
     in
     let alert =
       Builder.attribute ~loc ~name:{ txt = "alert"; loc }
@@ -181,13 +178,12 @@ module Browser_only = struct
           (PStr
              [
                Builder.pstr_eval ~loc
-                 (Builder.pexp_apply ~loc (Builder.evar ~loc name) [ (Nolabel, Builder.estring ~loc alert_message) ])
+                 (Builder.pexp_apply ~loc (Builder.evar ~loc melange_only)
+                    [ (Nolabel, Builder.estring ~loc alert_message) ])
                  [];
              ])
     in
-    let expression =
-      { expression with pexp_attributes = expression.pexp_attributes @ [ remove_alert_only ~name ~loc ] }
-    in
+    let expression = { expression with pexp_attributes = expression.pexp_attributes @ [ remove_alert_only ~loc ] } in
     let pattern =
       match type_constraint with
       | Some type_constraint ->
@@ -201,7 +197,7 @@ module Browser_only = struct
     let extractor_in_let = pstr_value __ (value_binding ~pat:__ ~expr:__ ~constraint_:drop ^:: nil) in
     pstr @@ extractor_in_let ^:: nil
 
-  let structure_item_handler ~name ~ctxt rec_flag pattern expression =
+  let structure_item_handler ~ctxt rec_flag pattern expression =
     let loc = Expansion_context.Extension.extension_point_loc ctxt in
     let do_nothing rec_flag =
       match rec_flag with
@@ -209,7 +205,7 @@ module Browser_only = struct
       | Nonrecursive -> [%stri let [%p pattern] = [%e expression]]
     in
 
-    let add_browser_only_alert expression =
+    let add_melange_only_alert expression =
       match expression.pexp_desc with
       | Pexp_constraint
           ( {
@@ -228,7 +224,7 @@ module Browser_only = struct
               (last_expr_to_raise_impossible ~loc original_function_name expr)
           in
           let item = { fn with pexp_attributes = expr.pexp_attributes } in
-          make_vb_with_browser_only ~name ~loc ~type_constraint pattern item
+          make_vb_with_melange_only ~loc ~type_constraint pattern item
       | Pexp_function
           ({ pparam_desc = Pparam_val (arg_label, _arg_expression, fun_pattern); _ } :: _, _, Pfunction_body expr) ->
           let original_function_name = get_function_name pattern.ppat_desc in
@@ -238,7 +234,7 @@ module Browser_only = struct
               (last_expr_to_raise_impossible ~loc original_function_name expr)
           in
           let item = { fn with pexp_attributes = expr.pexp_attributes } in
-          make_vb_with_browser_only ~name ~loc pattern item
+          make_vb_with_melange_only ~loc pattern item
       | Pexp_function ([], _, Pfunction_cases (_cases, _, _)) ->
           (* Because pexp_function with cases doesn't have a pattern, neither a label, we construct an empty pattern and use it to generate the vb *)
           let original_function_name = get_function_name pattern.ppat_desc in
@@ -248,44 +244,39 @@ module Browser_only = struct
               (last_expr_to_raise_impossible ~loc original_function_name expression)
           in
           let item = { fn with pexp_attributes = expression.pexp_attributes } in
-          make_vb_with_browser_only ~name ~loc pattern item
+          make_vb_with_melange_only ~loc pattern item
       | Pexp_ident { txt = _longident; loc } ->
           let item = [%expr Obj.magic ()] in
-          make_vb_with_browser_only ~name ~loc pattern item
+          make_vb_with_melange_only ~loc pattern item
       | Pexp_newtype (type_name, expr) ->
           let original_function_name = type_name.txt in
           let item = last_expr_to_raise_impossible ~loc original_function_name expr in
-          make_vb_with_browser_only ~name ~loc pattern item
+          make_vb_with_melange_only ~loc pattern item
       | _expr -> do_nothing rec_flag
     in
 
     match !mode with
     (* When it's -js, keep item as it is *)
     | Js -> do_nothing rec_flag
-    | Native -> add_browser_only_alert expression
+    | Native -> add_melange_only_alert expression
 
-  let structure_item_rule name =
+  let structure_item_rule =
     Context_free.Rule.extension
-      (Extension.V3.declare name Extension.Context.structure_item extractor_vb (structure_item_handler ~name))
+      (Extension.V3.declare melange_only Extension.Context.structure_item extractor_vb structure_item_handler)
 
-  let rules = List.concat_map (fun name -> [ expression_rule name; structure_item_rule name ]) melange_only_names
+  let rules = [ expression_rule; structure_item_rule ]
 end
 
 module Preprocess = struct
   (* This module is heavily based on leostera `config.ml` PPX:
      https://github.com/ocaml-sys/config.ml/blob/d248987cc1795de99d3735c06635dbd355d4d642/config/cfg_ppx.ml*)
 
-  let is_payload_ident ident attr =
-    match attr.attr_payload with
-    | PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident name; _ }; _ }, []); _ } ] ->
-        String.equal name ident
-    | _ -> false
-
   let eval_attr attr =
     let name = attr.attr_name.txt in
-    let melange_only = List.mem name melange_only_names || (name = platform_tag && is_payload_ident "js" attr) in
-    let native_only = List.mem name native_only_names || (name = platform_tag && is_payload_ident "native" attr) in
-    match !mode with Native when melange_only -> `drop | Js when native_only -> `drop | _ -> `keep
+    match !mode with
+    | Native when String.equal name melange_only -> `drop
+    | Js when String.equal name native_only -> `drop
+    | _ -> `keep
 
   let expression_error ~loc attrs =
     let name =
@@ -425,9 +416,52 @@ module Preprocess = struct
     end
 end
 
+module Removed = struct
+  let extension_rule context ~error =
+    Context_free.Rule.extension
+      (Extension.V3.declare "browser_only" context Ast_pattern.__ (fun ~ctxt _payload ->
+           let loc = Expansion_context.Extension.extension_point_loc ctxt in
+           error ~loc (removed_message ~removed:"%browser_only" ~replacement:"%melange_only")))
+
+  let rules =
+    [
+      extension_rule Extension.Context.expression ~error:(fun ~loc message ->
+          [%expr [%ocaml.error [%e Builder.estring ~loc message]]]);
+      extension_rule Extension.Context.structure_item ~error:(fun ~loc message ->
+          [%stri [%%ocaml.error [%e Builder.estring ~loc message]]]);
+    ]
+
+  let attribute_replacement attr =
+    match (attr.attr_name.txt, attr.attr_payload) with
+    | "browser_only", _ -> Some ("[@browser_only]", "[@melange_only]")
+    | "platform", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident "js"; _ }; _ }, []); _ } ] ->
+        Some ("[@platform js]", "[@melange_only]")
+    | "platform", PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_ident { txt = Lident "native"; _ }; _ }, []); _ } ]
+      ->
+        Some ("[@platform native]", "[@native_only]")
+    | "platform", _ -> Some ("[@platform ...]", "[@melange_only] or [@native_only]")
+    | _ -> None
+
+  (* An attribute can't carry an error node, so this one stops at the first removed attribute. *)
+  let reject =
+    object
+      inherit Ast_traverse.iter as super
+
+      method! attribute attr =
+        match attribute_replacement attr with
+        | Some (removed, replacement) ->
+            Location.raise_errorf ~loc:attr.attr_loc "%s" (removed_message ~removed ~replacement)
+        | None -> super#attribute attr
+    end
+end
+
 let () =
   Driver.add_arg "-js" (Unit (fun () -> mode := Js)) ~doc:"preprocess for js build";
-  let rules = Platform.rule :: Browser_only.rules in
-  Driver.V2.register_transformation browser_ppx ~rules
-    ~impl:(fun _ -> Preprocess.traverse#structure)
-    ~intf:(fun _ -> Preprocess.traverse#signature)
+  let rules = (Platform.rule :: Melange_only.rules) @ Removed.rules in
+  Driver.V2.register_transformation "ppx_platform" ~rules
+    ~impl:(fun _ structure ->
+      Removed.reject#structure structure;
+      Preprocess.traverse#structure structure)
+    ~intf:(fun _ signature ->
+      Removed.reject#signature signature;
+      Preprocess.traverse#signature signature)

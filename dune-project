@@ -23,7 +23,7 @@
  (name ppx_platform)
  (synopsis "Platform-specific code for native and Melange builds")
  (description
-  "A ppx rewriter that keeps one OCaml codebase for native and Melange builds: let%browser_only, [@platform js], [@platform native] and switch%platform pick the code that each target compiles.")
+  "A ppx rewriter that keeps one OCaml codebase for native and Melange builds: let%melange_only, [@melange_only], [@native_only] and match%platform pick the code that each target compiles.")
  (depends
   (ocaml (>= 4.14.1))
   (ppxlib (>= 0.36.0))

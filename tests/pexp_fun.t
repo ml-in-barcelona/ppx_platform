@@ -1,10 +1,10 @@
   $ cat > input.ml << EOF
   > let make () =
-  >   let%browser_only fun_value_binding_pexp_fun_2arg evt moar_arguments =
+  >   let%melange_only fun_value_binding_pexp_fun_2arg evt moar_arguments =
   >     Webapi.Dom.getElementById "foo"
   >   in
   > 
-  >   let%browser_only perform ?abortController ?(base = defaultBase) (req : ('handler, 'a, 'i, 'o) Client.request) input =
+  >   let%melange_only perform ?abortController ?(base = defaultBase) (req : ('handler, 'a, 'i, 'o) Api.request) input =
   >     Js.log Foo.var;
   >     Js.log record.field;
   >     Local.setHtmlFetchState value;
@@ -15,13 +15,13 @@
   >     Js.log input
   >   in
   > 
-  >   let%browser_only fun_value_binding_labelled_args ~argument1 ~argument2 =
+  >   let%melange_only fun_value_binding_labelled_args ~argument1 ~argument2 =
   >     setHtmlFetchState Loading
   >   in
   >   ()
   > EOF
 
-With -js flag everything keeps as it is and browser_only extension disappears
+With -js flag everything keeps as it is and melange_only extension disappears
 
   $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
   let make () =
@@ -29,7 +29,7 @@ With -js flag everything keeps as it is and browser_only extension disappears
       Webapi.Dom.getElementById "foo"
     in
     let perform ?abortController ?(base = defaultBase)
-        (req : ('handler, 'a, 'i, 'o) Client.request) input =
+        (req : ('handler, 'a, 'i, 'o) Api.request) input =
       Js.log Foo.var;
       Js.log record.field;
       Local.setHtmlFetchState value;
@@ -53,16 +53,16 @@ Without -js flag, the compilation to native replaces the expression with a raise
     let fun_value_binding_pexp_fun_2arg evt =
       Ppx_platform_runtime.fail_impossible_action_in_ssr
         "fun_value_binding_pexp_fun_2arg"
-        [@@alert "-browser_only"]
+        [@@alert "-melange_only"]
     in
     let perform ?abortController =
       Ppx_platform_runtime.fail_impossible_action_in_ssr "perform"
-        [@@alert "-browser_only"]
+        [@@alert "-melange_only"]
     in
     let fun_value_binding_labelled_args ~argument1 =
       Ppx_platform_runtime.fail_impossible_action_in_ssr
         "fun_value_binding_labelled_args"
-        [@@alert "-browser_only"]
+        [@@alert "-melange_only"]
     in
     ()
 

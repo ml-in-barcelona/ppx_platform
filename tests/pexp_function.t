@@ -1,10 +1,10 @@
   $ cat > input.re << EOF
-  > let%browser_only foo = fun
+  > let%melange_only foo = fun
   >     | x when x < 0. => None
   >     | x => Some("bar");
   > 
   > let make = () => {
-  >   let%browser_only foo = fun
+  >   let%melange_only foo = fun
   >     | x when x < 0. => None
   >     | x => Some("bar");
   >   ();
@@ -13,7 +13,7 @@
 
   $ refmt --parse re --print ml input.re > input.ml
 
-With -js flag everything keeps as it is and browser_only extension disappears
+With -js flag everything keeps as it is and melange_only extension disappears
 
   $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
   let foo = function x when x < 0. -> None | x -> Some "bar" [@explicit_arity]
@@ -30,19 +30,18 @@ Without -js flag, the compilation to native errors out indicating that a functio
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl
   let (foo
        [@alert
-         browser_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%browser_only \
-            function."]) =
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun _ ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr "foo")
-    [@alert "-browser_only"]
+    [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let make () =
     let foo =
       [%ocaml.error
-        "[browser_ppx] browser_only works on function definitions. For other \
+        "[ppx_platform] melange_only works on function definitions. For other \
          cases, use switch%platform or feel free to open an issue in \
          https://github.com/ml-in-barcelona/ppx_platform."]
     in
