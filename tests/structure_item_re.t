@@ -79,7 +79,7 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun evt ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr "valueFromEvent")
+    Ppx_platform.fail_melange_only "valueFromEvent")
     [@alert "-melange_only"]
   [@@warning "-27-32"]
   
@@ -89,8 +89,7 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr
-      "getSortedWordCountsBrowserOnly")
+    Ppx_platform.fail_melange_only "getSortedWordCountsBrowserOnly")
     [@alert "-melange_only"]
   [@@warning "-27-32"]
   
@@ -100,7 +99,7 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun ?id component ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr "renderToElementWithId")
+    Ppx_platform.fail_melange_only "renderToElementWithId")
     [@alert "-melange_only"]
   [@@warning "-27-32"]
   
@@ -110,8 +109,7 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr
-      "getSortedWordCountsBrowserOnly")
+    Ppx_platform.fail_melange_only "getSortedWordCountsBrowserOnly")
     [@alert "-melange_only"]
   [@@warning "-27-32"]
   
@@ -121,7 +119,6 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr
-      "getSortedWordCountsBrowserOnly")
+    Ppx_platform.fail_melange_only "getSortedWordCountsBrowserOnly")
     [@alert "-melange_only"]
   [@@warning "-27-32"]

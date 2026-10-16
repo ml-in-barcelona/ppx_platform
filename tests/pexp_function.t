@@ -33,9 +33,7 @@ Without -js flag, the compilation to native errors out indicating that a functio
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun _ ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr "foo")
-    [@alert "-melange_only"]
+   (fun _ -> Ppx_platform.fail_melange_only "foo") [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let make () =

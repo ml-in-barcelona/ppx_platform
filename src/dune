@@ -1,5 +1,5 @@
 (library
- (name ppx_platform)
+ (name ppx_platform_ppx)
  (public_name ppx_platform)
  (flags :standard -w -9)
  (libraries ppxlib ppxlib.astlib)

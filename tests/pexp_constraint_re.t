@@ -53,8 +53,7 @@
   $ ./standalone.exe -impl input.ml | refmt --parse ml --print re
   let make = () => {
     [@alert "-melange_only"]
-    let discard = value =>
-      Ppx_platform_runtime.fail_impossible_action_in_ssr("discard");
+    let discard = value => Ppx_platform.fail_melange_only("discard");
     ();
   };
   let reifyStyle = (type a, x: 'a): (style(a), a) => {

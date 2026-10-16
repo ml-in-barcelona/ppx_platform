@@ -2,7 +2,7 @@
  (package ppx_platform)
  (enabled_if
   (>= %{ocaml_version} 5.2.0))
- (deps %{bin:ocamlformat} standalone.exe ../runtime/ppx_platform_runtime.ml))
+ (deps %{bin:ocamlformat} standalone.exe ../runtime/ppx_platform.ml))
 
 (executable
  (name standalone)

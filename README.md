@@ -112,7 +112,7 @@ end [@@native_only]
 
 For functions and let bindings that only get compiled by Melange and are meant
 for the browser. On native, the body becomes an expression that raises
-`Ppx_platform_runtime.Impossible_in_ssr`, and the binding gets a
+`Ppx_platform.Melange_only`, and the binding gets a
 `melange_only` alert. So native code that calls it outside another
 `let%melange_only` gets a compiler alert (an error with
 `-alert @melange_only`):
@@ -128,8 +128,13 @@ crashes. To give a fallback value instead, catch the exception:
 let%melange_only window_width () = Webapi.Dom.(window |> Window.innerWidth)
 
 let width () =
-  try window_width () with Ppx_platform_runtime.Impossible_in_ssr _ -> 0
+  try window_width () with Ppx_platform.Melange_only _ -> 0
 ```
+
+With `OCAMLRUNPARAM=b` (or `Printexc.record_backtrace true`), the runtime
+prints the message and the call stack to stderr before it raises, so a caught
+call still leaves a trace. To change how an uncaught `Melange_only` prints,
+register your own `Printexc` printer. It takes precedence over the runtime's.
 
 `[%melange_only fun ...]` does the same for an expression:
 

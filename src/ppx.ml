@@ -48,19 +48,19 @@ end
 let remove_type_constraint pattern =
   match pattern with { ppat_desc = Ppat_constraint (pattern, _); _ } -> pattern | _ -> pattern
 
-let rec last_expr_to_raise_impossible ~loc original_name expr =
+let rec last_expr_to_raise_melange_only ~loc original_name expr =
   match expr.pexp_desc with
-  | Pexp_constraint (expr, _) -> last_expr_to_raise_impossible ~loc original_name expr
+  | Pexp_constraint (expr, _) -> last_expr_to_raise_melange_only ~loc original_name expr
   | Pexp_function
       ({ pparam_desc = Pparam_val (arg_label, _arg_expression, fun_pattern); _ } :: _rest, _, Pfunction_body expression)
     ->
       let new_fun_pattern = remove_type_constraint fun_pattern in
       let fn =
         Builder.pexp_fun ~loc arg_label None new_fun_pattern
-          (last_expr_to_raise_impossible ~loc original_name expression)
+          (last_expr_to_raise_melange_only ~loc original_name expression)
       in
       { fn with pexp_attributes = expr.pexp_attributes }
-  | _ -> [%expr Ppx_platform_runtime.fail_impossible_action_in_ssr [%e Builder.estring ~loc original_name]]
+  | _ -> [%expr Ppx_platform.fail_melange_only [%e Builder.estring ~loc original_name]]
 
 module Melange_only = struct
   let get_function_name pattern = match pattern with Ppat_var { txt = name; _ } -> name | _ -> "<unkwnown>"
@@ -78,10 +78,7 @@ module Melange_only = struct
   let melange_only_fun ~loc arg_label pattern expression =
     let stringified = Ppxlib.Pprintast.string_of_expression expression in
     let message = Builder.estring ~loc stringified in
-    let fn =
-      Builder.pexp_fun ~loc arg_label None pattern
-        [%expr Ppx_platform_runtime.fail_impossible_action_in_ssr [%e message]]
-    in
+    let fn = Builder.pexp_fun ~loc arg_label None pattern [%expr Ppx_platform.fail_melange_only [%e message]] in
     { fn with pexp_attributes = expression.pexp_attributes }
 
   let melange_only_value_binding pattern expression =
@@ -94,12 +91,12 @@ module Melange_only = struct
             ( { pexp_desc = Pexp_function ({ pparam_desc = Pparam_val _; _ } :: _, _, Pfunction_body _); _ },
               _type_constraint ) ->
             let function_name = get_function_name pattern.ppat_desc in
-            let expr = last_expr_to_raise_impossible ~loc function_name expression in
+            let expr = last_expr_to_raise_melange_only ~loc function_name expression in
             let vb = Builder.value_binding ~loc ~pat:pattern ~expr in
             { vb with pvb_attributes = [ remove_alert_only ~loc ] }
         | Pexp_function ({ pparam_desc = Pparam_val _; _ } :: _, _, Pfunction_body _) ->
             let function_name = get_function_name pattern.ppat_desc in
-            let expr = last_expr_to_raise_impossible ~loc function_name expression in
+            let expr = last_expr_to_raise_melange_only ~loc function_name expression in
             let vb = Builder.value_binding ~loc ~pat:pattern ~expr in
             { vb with pvb_attributes = [ remove_alert_only ~loc ] }
         | _ -> Builder.value_binding ~loc ~pat:pattern ~expr:(error_only_works_on ~loc))
@@ -107,7 +104,7 @@ module Melange_only = struct
   let extractor_single_payload = Ast_pattern.(single_expr_payload __)
 
   let expression_handler ~ctxt payload =
-    let replace_fun_body_with_raise_impossible ~loc pexp_desc =
+    let replace_fun_body_with_raise_melange_only ~loc pexp_desc =
       match pexp_desc with
       | Pexp_constraint
           ( {
@@ -125,7 +122,7 @@ module Melange_only = struct
           ({ pparam_desc = Pparam_val (arg_label, _arg_expression, pattern); _ } :: _, _, Pfunction_body expr) ->
           let function_name = get_function_name pattern.ppat_desc in
           let new_fun_pattern = remove_type_constraint pattern in
-          Builder.pexp_fun ~loc arg_label None new_fun_pattern (last_expr_to_raise_impossible ~loc function_name expr)
+          Builder.pexp_fun ~loc arg_label None new_fun_pattern (last_expr_to_raise_melange_only ~loc function_name expr)
       | Pexp_let (rec_flag, value_bindings, expression) ->
           let pexp_let =
             Builder.pexp_let ~loc rec_flag
@@ -139,7 +136,7 @@ module Melange_only = struct
     | Js -> payload
     | Native ->
         let loc = Expansion_context.Extension.extension_point_loc ctxt in
-        replace_fun_body_with_raise_impossible ~loc payload.pexp_desc
+        replace_fun_body_with_raise_melange_only ~loc payload.pexp_desc
 
   let expression_rule =
     Context_free.Rule.extension
@@ -200,7 +197,7 @@ module Melange_only = struct
           let new_fun_pattern = remove_type_constraint fun_pattern in
           let fn =
             Builder.pexp_fun ~loc arg_label None new_fun_pattern
-              (last_expr_to_raise_impossible ~loc original_function_name expr)
+              (last_expr_to_raise_melange_only ~loc original_function_name expr)
           in
           let item = { fn with pexp_attributes = expr.pexp_attributes } in
           make_vb_with_melange_only ~loc ~type_constraint pattern item
@@ -210,7 +207,7 @@ module Melange_only = struct
           let new_fun_pattern = remove_type_constraint fun_pattern in
           let fn =
             Builder.pexp_fun ~loc arg_label None new_fun_pattern
-              (last_expr_to_raise_impossible ~loc original_function_name expr)
+              (last_expr_to_raise_melange_only ~loc original_function_name expr)
           in
           let item = { fn with pexp_attributes = expr.pexp_attributes } in
           make_vb_with_melange_only ~loc pattern item
@@ -220,7 +217,7 @@ module Melange_only = struct
           let fn =
             Builder.pexp_fun ~loc Nolabel None
               [%pat? _]
-              (last_expr_to_raise_impossible ~loc original_function_name expression)
+              (last_expr_to_raise_melange_only ~loc original_function_name expression)
           in
           let item = { fn with pexp_attributes = expression.pexp_attributes } in
           make_vb_with_melange_only ~loc pattern item
@@ -229,7 +226,7 @@ module Melange_only = struct
           make_vb_with_melange_only ~loc pattern item
       | Pexp_newtype (type_name, expr) ->
           let original_function_name = type_name.txt in
-          let item = last_expr_to_raise_impossible ~loc original_function_name expr in
+          let item = last_expr_to_raise_melange_only ~loc original_function_name expr in
           make_vb_with_melange_only ~loc pattern item
       | _expr -> do_nothing rec_flag
     in
