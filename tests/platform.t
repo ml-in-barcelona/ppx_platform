@@ -1,33 +1,21 @@
-New names: Native / Melange cases, melange_only and native_only.
+Native / Melange cases, melange_only and native_only.
 
 match%platform accepts Native and Melange
 
   $ cat > switch.ml << EOF
   > let a = match%platform () with Native -> "native" | Melange -> "melange"
   > let b = match%platform () with Melange -> "melange" | Native -> "native"
-  > let c = match%platform () with Runtime.Server -> "native" | Runtime.Client -> "melange"
-  > let d = match%platform () with Native -> "native" | Client -> "melange"
-  > let e = match%platform () with Melange -> "melange" | Server -> "native"
-  > let f = match%platform () with Server -> "native" | Melange -> "melange"
   > EOF
 
   $ ./standalone.exe -impl switch.ml -js | ocamlformat - --enable-outside-detected-project --impl
   let a = "melange"
   let b = "melange"
-  let c = "melange"
-  let d = "melange"
-  let e = "melange"
-  let f = "melange"
 
   $ ./standalone.exe -impl switch.ml | ocamlformat - --enable-outside-detected-project --impl
   let a = "native"
   let b = "native"
-  let c = "native"
-  let d = "native"
-  let e = "native"
-  let f = "native"
 
-Wrong case names or count are errors that mention the new names
+Wrong case names or count are errors
 
   $ cat > switch_error.ml << EOF
   > let a = match%platform () with Native -> 1 | Native -> 2
@@ -38,16 +26,14 @@ Wrong case names or count are errors that mention the new names
   $ ./standalone.exe -impl switch_error.ml | ocamlformat - --enable-outside-detected-project --impl
   let a =
     [%ocaml.error
-      "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange` \
-       (the old names `Server` and `Client` also work)"]
+      "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange`"]
   
   let b =
     [%ocaml.error
-      "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange` \
-       (the old names `Server` and `Client` also work)"]
+      "[ppx_platform] switch%platform requires 2 cases: `Native` and `Melange`"]
   
   let c =
-    [%ocaml.error "[browser_ppx] switch%platform requires a match expression"]
+    [%ocaml.error "[ppx_platform] switch%platform requires a match expression"]
 
 Attributes on items, fields and types
 
@@ -116,7 +102,6 @@ On expressions, the attribute of the target that drops it is an error
   $ cat > attr_expr.ml << EOF
   > let a = (1 [@melange_only])
   > let b = (1 [@native_only])
-  > let c = (1 [@browser_only])
   > EOF
 
   $ ./standalone.exe -impl attr_expr.ml | ocamlformat - --enable-outside-detected-project --impl
@@ -125,10 +110,6 @@ On expressions, the attribute of the target that drops it is an error
       "Don't use melange_only on expressions, use switch%platform instead"]
   
   let b = (1 [@native_only])
-  
-  let c =
-    [%ocaml.error
-      "Don't use browser_only on expressions, use switch%platform instead"]
 
   $ ./standalone.exe -impl attr_expr.ml -js | ocamlformat - --enable-outside-detected-project --impl
   let a = (1 [@melange_only])
@@ -136,8 +117,6 @@ On expressions, the attribute of the target that drops it is an error
   let b =
     [%ocaml.error
       "Don't use native_only on expressions, use switch%platform instead"]
-  
-  let c = (1 [@browser_only])
 
 let%melange_only and [%melange_only ...]
 
@@ -162,9 +141,8 @@ let%melange_only and [%melange_only ...]
   let (f
        [@alert
          melange_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%melange_only \
-            function."]) =
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun x ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr "f")
     [@alert "-melange_only"]
@@ -173,9 +151,8 @@ let%melange_only and [%melange_only ...]
   let (g
        [@alert
          melange_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%melange_only \
-            function."]) =
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun ?a ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr "g")
     [@alert "-melange_only"]
@@ -184,9 +161,8 @@ let%melange_only and [%melange_only ...]
   let (h
        [@alert
          melange_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%melange_only \
-            function."]) =
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
     Obj.magic () [@alert "-melange_only"]
   [@@warning "-27-32"]
   
@@ -201,42 +177,11 @@ let%melange_only and [%melange_only ...]
   let (( let+ )
        [@alert
          melange_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%melange_only \
-            function."]) =
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
    (fun p ->
     Ppx_platform_runtime.fail_impossible_action_in_ssr "let+")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
-
-The generated native code carries a melange_only alert for the new name and a browser_only alert for the old one
-
-  $ cat > alert.ml << EOF
-  > let%melange_only new_name x = x
-  > let%browser_only old_name x = x
-  > EOF
-
-  $ ./standalone.exe -impl alert.ml | ocamlformat - --enable-outside-detected-project --impl
-  let (new_name
-       [@alert
-         melange_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%melange_only \
-            function."]) =
-   (fun x ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr "new_name")
-    [@alert "-melange_only"]
-  [@@warning "-27-32"]
-  
-  let (old_name
-       [@alert
-         browser_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%browser_only \
-            function."]) =
-   (fun x ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr "old_name")
-    [@alert "-browser_only"]
   [@@warning "-27-32"]
 
 A floating attribute at the start of a file drops the whole file
@@ -250,54 +195,6 @@ A floating attribute at the start of a file drops the whole file
 
   $ ./standalone.exe -impl floating.ml -js | ocamlformat - --enable-outside-detected-project --impl
   let x = 1
-
-Mixed old and new names in one file
-
-  $ cat > mixed.ml << EOF
-  > let%browser_only old_fn x = x
-  > let%melange_only new_fn x = x
-  > let a = match%platform () with Server -> 1 | Melange -> 2
-  > let b = 1 [@@browser_only]
-  > let c = 2 [@@melange_only]
-  > let d = 3 [@@platform js]
-  > let e = 4 [@@native_only]
-  > let f = 5 [@@platform native]
-  > EOF
-
-  $ ./standalone.exe -impl mixed.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  let old_fn x = x
-  let new_fn x = x
-  let a = 2
-  let b = 1 [@@browser_only]
-  let c = 2 [@@melange_only]
-  let d = 3 [@@platform js]
-
-  $ ./standalone.exe -impl mixed.ml | ocamlformat - --enable-outside-detected-project --impl
-  let (old_fn
-       [@alert
-         browser_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%browser_only \
-            function."]) =
-   (fun x ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr "old_fn")
-    [@alert "-browser_only"]
-  [@@warning "-27-32"]
-  
-  let (new_fn
-       [@alert
-         melange_only
-           "This expression is marked to only run on the browser where \
-            JavaScript can run. You can only use it inside a let%melange_only \
-            function."]) =
-   (fun x ->
-    Ppx_platform_runtime.fail_impossible_action_in_ssr "new_fn")
-    [@alert "-melange_only"]
-  [@@warning "-27-32"]
-  
-  let a = 1
-  let e = 4 [@@native_only]
-  let f = 5 [@@platform native]
 
 The -melange flag is not registered: server-reason-react.ppx registers it, and
 ppxlib runs only one handler for a duplicated flag.

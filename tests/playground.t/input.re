@@ -1,4 +1,4 @@
-let%browser_only makeQuery =
+let%melange_only makeQuery =
                  (~abortController, ~encoding=?, pathname, req, input) => {
   let signal =
     abortController->Option.map(abortController =>

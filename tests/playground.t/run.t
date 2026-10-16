@@ -68,12 +68,12 @@
   $ ../standalone.exe -impl input.ml | refmt --parse ml --print re
   [@warning "-27-32"]
   let [@alert
-        browser_only(
-          "This expression is marked to only run on the browser where JavaScript can run. You can only use it inside a let%browser_only function.",
+        melange_only(
+          "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.",
         )
       ]
       makeQuery =
-    [@alert "-browser_only"]
+    [@alert "-melange_only"]
     (
       (~abortController, ~encoding=?, pathname, req, input) =>
         Ppx_platform_runtime.fail_impossible_action_in_ssr("makeQuery")
