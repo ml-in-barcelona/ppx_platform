@@ -1,6 +1,6 @@
 # Changes
 
-## Unreleased
+## 0.3.0
 
 - Breaking: the runtime module `Ppx_platform_runtime` is now `Ppx_platform`. `exception Impossible_in_ssr of string` is
   now `exception Melange_only of string`, and `fail_impossible_action_in_ssr` is now `fail_melange_only`. It prints a
