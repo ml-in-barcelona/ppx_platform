@@ -3,11 +3,10 @@
 ## Unreleased
 
 - Breaking: the runtime module `Ppx_platform_runtime` is now `Ppx_platform`. `exception Impossible_in_ssr of string` is
-  now `exception Melange_only of string`, and `fail_impossible_action_in_ssr` is now `fail_melange_only`. It prints the
-  message and the call stack to stderr only when backtraces are on (`OCAMLRUNPARAM=b` or `Printexc.record_backtrace true`),
-  then raises. The runtime registers a printer, so an uncaught `Melange_only name` prints
-  `'name' is melange_only and ran in the native build.` Your own `Printexc` printer takes precedence. The library name of the ppx is now `ppx_platform_ppx`. The
-  public names `ppx_platform` and `ppx_platform.runtime` do not change.
+  now `exception Melange_only of string`, and `fail_impossible_action_in_ssr` is now `fail_melange_only`. It prints a
+  hint and the call stack to stderr only when backtraces are on (`OCAMLRUNPARAM=b` or `Printexc.record_backtrace true`),
+  then raises. The library name of the ppx is now `ppx_platform_ppx`. The public names `ppx_platform` and
+  `ppx_platform.runtime` do not change.
 - Breaking: remove the old names. `ppx_platform` no longer handles them. Replace each one as follows:
 
   | Removed                                                                      | Use                                   |

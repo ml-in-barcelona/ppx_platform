@@ -132,9 +132,8 @@ let width () =
 ```
 
 With `OCAMLRUNPARAM=b` (or `Printexc.record_backtrace true`), the runtime
-prints the message and the call stack to stderr before it raises, so a caught
-call still leaves a trace. To change how an uncaught `Melange_only` prints,
-register your own `Printexc` printer. It takes precedence over the runtime's.
+prints a hint and the call stack to stderr before it raises, so a caught call
+still leaves a trace.
 
 `[%melange_only fun ...]` does the same for an expression:
 
