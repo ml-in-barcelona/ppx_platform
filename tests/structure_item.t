@@ -104,6 +104,6 @@ With -js flag everything keeps as it is and melange_only extension disappears
   [@@warning "-27-32"]
 Replace Ppx_platform.fail_melange_only with print_endline so ocamlc can compile it without the runtime library dependency
   $ echo "module Ppx_platform = struct" >> output.ml
-  $ cat $INSIDE_DUNE/runtime/ppx_platform.ml >> output.ml
+  $ cat $INSIDE_DUNE/src/runtime/ppx_platform.ml >> output.ml
   $ echo "end" >> output.ml
   $ ocamlc -c output.ml
