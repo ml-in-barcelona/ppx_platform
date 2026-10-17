@@ -4,9 +4,6 @@ A ppx rewriter that keeps one OCaml codebase for native and
 [Melange](https://melange.re) builds. It picks the code that each target
 compiles and replaces Melange-only code with a runtime failure on native.
 
-Extracted from
-[server-reason-react](https://github.com/ml-in-barcelona/server-reason-react).
-
 ## Install
 
 ```sh
@@ -24,7 +21,7 @@ Native library or executable:
   (pps ppx_platform)))
 ```
 
-Melange library: pass the `-js` flag to the ppx.
+Melange library needs the `-js` flag to the ppx.
 
 ```dune
 (library
@@ -34,14 +31,12 @@ Melange library: pass the `-js` flag to the ppx.
   (pps ppx_platform -- -js)))
 ```
 
-The ppx adds `ppx_platform.runtime` as a dependency of both builds.
-
 ## Syntax
 
-### match%platform
+### `match%platform`
 
 `match%platform` picks one of two expressions at compile time. The cases are
-`Native` and `Melange`. In Reason, write `switch%platform`.
+`Native` and `Melange`:
 
 ```ocaml
 let api path =
@@ -75,15 +70,12 @@ one that remains for each target.
 
 This lets one codebase:
 
-1. Behave differently on each target where it must. In `api`, the server
-   needs an absolute URL, and the browser can use a relative one.
-2. Use modules that exist on one target only. In `now`, `Unix` does not
-   exist in Melange and `Js.Date` does not exist on native. Each build compiles
-   only its own branch, so neither needs the other's module.
+1. Behave differently on each target where it must. In `api`, the server needs an absolute URL, and the browser can use a relative one.
+2. Use modules that exist on one target only. In `now`, `Unix` does not exist in Melange and `Js.Date` does not exist on native. Each build compiles only its own branch, so neither needs the other's module.
 
-### [@melange_only] / [@native_only]
+### `[@melange_only]` / `[@native_only]`
 
-For modules and other top-level items. The item stays on one target only:
+For modules and other top-level items:
 
 ```ocaml
 include [@melange_only] struct
@@ -99,30 +91,28 @@ Two items with the same name are fine. Each build keeps only one of them, so
 the module exists on both targets:
 
 ```ocaml
-module X = struct
+module [@melange_only] X = struct
   type t = Js.Json.t
-end [@@melange_only]
+end
 
-module X = struct
+module [@native_only] X = struct
   type t = Yojson.Basic.t
-end [@@native_only]
+end
 ```
 
-### melange_only
+### `let%melange_only`
 
 For functions and let bindings that only get compiled by Melange and are meant
-for the browser. On native, the body becomes an expression that raises
-`Ppx_platform.Melange_only`, and the binding gets a
-`melange_only` alert. So native code that calls it outside another
-`let%melange_only` gets a compiler alert (an error with
-`-alert @melange_only`):
+for the browser.
 
 ```ocaml
 let%melange_only focus_input element = Webapi.Dom.HtmlElement.focus element
 ```
 
-If native code calls it anyway, the exception is not caught and the program
-crashes. To give a fallback value instead, catch the exception:
+On native, the body becomes an expression that raises `Ppx_platform.Melange_only`, and the binding gets a `melange_only` alert. So native code that calls it outside another
+`let%melange_only` gets a compiler alert (an error with `-alert @melange_only`):
+
+To have a fallback value instead, catch the exception:
 
 ```ocaml
 let%melange_only window_width () = Webapi.Dom.(window |> Window.innerWidth)
@@ -131,22 +121,15 @@ let width () =
   try window_width () with Ppx_platform.Melange_only _ -> 0
 ```
 
-With `OCAMLRUNPARAM=b` (or `Printexc.record_backtrace true`), the runtime
-prints a hint and the call stack to stderr before it raises, so a caught call
-still leaves a trace.
-
 `[%melange_only fun ...]` does the same for an expression:
 
 ```ocaml
 let on_click = [%melange_only fun event -> Js.log event]
 ```
 
-`[@melange_only]` removes an item or a record field on native:
-
-```ocaml
-let window_size = (fun () -> (0, 0)) [@@melange_only]
-```
-
 ## Licence
 
 MIT
+
+## Credits
+Extracted from [server-reason-react](https://github.com/ml-in-barcelona/server-reason-react).
