@@ -44,7 +44,6 @@ jobs:
         uses: ocaml/setup-ocaml@v3.9.0
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          dune-cache: false
           opam-disable-sandboxing: true
 
       - name: Install opam deps

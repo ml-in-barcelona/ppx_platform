@@ -28,7 +28,6 @@ jobs:
         uses: ocaml/setup-ocaml@v3.9.0
         with:
           ocaml-compiler: 5.4.0
-          dune-cache: false
           opam-disable-sandboxing: true
 
       - name: Install opam deps
