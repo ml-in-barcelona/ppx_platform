@@ -44,7 +44,7 @@ format-check: ## Checks if format is correct
 	@DUNE_CONFIG__GLOBAL_LOCK=disabled $(DUNE) build @fmt
 
 .PHONY: docs
-docs: ## Generate the Markdown docs into docs/
+docs: ## Generate docs/index.md from doc/index.mld
 	$(DUNE) build @docs
 
 .PHONY: create-switch

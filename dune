@@ -3,9 +3,8 @@
  (mode promote)
  (targets
   (dir docs))
- (deps
-  (alias doc-markdown))
+ (deps _doc/_markdown/ppx_platform/index.md)
  (action
   (progn
    (run mkdir docs)
-   (run cp -r _doc/_markdown/. docs/))))
+   (run cp %{deps} docs/index.md))))
