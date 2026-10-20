@@ -38,7 +38,7 @@ let%melange_only countDomNodes = (id) => {
   Array.length(arr_elements);
 };
 ```
-The Melange build keeps the function. In the native build, the ppx replaces the body with a call that raises [`Ppx_platform.Melange_only`](./Ppx_platform.md#exception-Melange_only). The binding also gets a `melange_only` alert. Native code that calls it outside another `let%melange_only` gets this alert, which is an error with `-alert @melange_only`.
+The Melange build keeps the function. In the native build, the ppx replaces the body with a call that raises `Ppx_platform.Melange_only`. The binding also gets a `melange_only` alert. Native code that calls it outside another `let%melange_only` gets this alert, which is an error with `-alert @melange_only`.
 
 If the function runs on native anyway, it raises the exception. When backtraces are on (`OCAMLRUNPARAM=b` or `Printexc.record_backtrace true`), it first prints a hint and the call stack to stderr. An uncaught exception stops the program, so catch it if you are not sure that the function stays away from native. You can also catch it to give a fallback value:
 
@@ -114,6 +114,4 @@ module X = {
 
 ## Libraries
 
-The ppx is the `ppx_platform` library. The generated code calls the runtime library `ppx_platform.runtime`:
-
-[`Ppx_platform`](./Ppx_platform.md) 
+The ppx is the `ppx_platform` library. The generated code calls the runtime library `ppx_platform.runtime`.
