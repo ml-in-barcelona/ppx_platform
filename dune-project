@@ -2,6 +2,8 @@
 
 (using melange 0.1)
 
+(using directory-targets 0.1)
+
 (cram enable)
 
 (name ppx_platform)

@@ -1,0 +1,10 @@
+(rule
+ (alias docs)
+ (mode promote)
+ (targets
+  (dir docs))
+ (deps _doc/_markdown/ppx_platform/index.md)
+ (action
+  (progn
+   (run mkdir docs)
+   (run cp %{deps} docs/index.md))))

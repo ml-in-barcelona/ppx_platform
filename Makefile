@@ -43,6 +43,10 @@ format: ## Format the codebase with ocamlformat
 format-check: ## Checks if format is correct
 	@DUNE_CONFIG__GLOBAL_LOCK=disabled $(DUNE) build @fmt
 
+.PHONY: docs
+docs: ## Generate docs/index.md from doc/index.mld
+	$(DUNE) build @docs
+
 .PHONY: create-switch
 create-switch: ## Create opam switch
 	opam switch create . 5.4.0 --deps-only --with-test -y
