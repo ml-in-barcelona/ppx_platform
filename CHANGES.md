@@ -4,6 +4,7 @@
 
 - Add the odoc documentation page `doc/index.mld`, moved from server-reason-react. It shows the package page on
   ocaml.org and links to the `Ppx_platform` runtime module.
+- Add `make docs` (`dune build @docs`). It writes the Markdown docs to `docs/`. CI checks that they are current.
 
 ## 0.3.0
 

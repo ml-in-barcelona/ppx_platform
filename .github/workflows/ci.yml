@@ -58,6 +58,14 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Install odoc
+        run: opam install odoc.3.2.1 -y
+
+      - name: Check docs are up to date
+        run: |
+          make docs
+          test -z "$(git status --porcelain docs/)"
+
       - name: Install dune-release
         if: matrix.os == 'ubuntu-latest'
         run: opam install dune-release -y
