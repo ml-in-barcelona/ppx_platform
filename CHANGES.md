@@ -1,5 +1,10 @@
 # Changes
 
+## Unreleased
+
+- Add the odoc documentation page `doc/index.mld`, moved from server-reason-react. It shows the package page on
+  ocaml.org and links to the `Ppx_platform` runtime module.
+
 ## 0.3.0
 
 - Breaking: the runtime module `Ppx_platform_runtime` is now `Ppx_platform`. `exception Impossible_in_ssr of string` is
