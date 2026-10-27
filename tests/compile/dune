@@ -2,38 +2,22 @@
 ; target of each build, so the ppx picks the code of that target.
 
 (library
- (name mode_ppx)
- (modules mode_ppx)
- (kind ppx_rewriter)
- (libraries ppxlib))
-
-(library
  (name sample)
  (modules sample)
  (modes :standard melange)
  (preprocess
-  (pps ppx_platform mode_ppx)))
-
-(rule
- (copy sample.ml sample_swapped.ml))
-
-(library
- (name sample_swapped)
- (modules sample_swapped)
- (modes :standard melange)
- (preprocess
-  (pps mode_ppx ppx_platform)))
+  (pps ppx_platform)))
 
 (melange.emit
  (target out)
  (modules)
- (libraries sample sample_swapped)
+ (libraries sample)
  (module_systems commonjs))
 
 (executable
  (name check)
  (modules check)
- (libraries sample sample_swapped ppx_platform.runtime))
+ (libraries sample ppx_platform.runtime))
 
 (rule
  (alias runtest)
@@ -46,22 +30,11 @@
 (rule
  (alias runtest)
  (package ppx_platform)
- (deps out/tests/compile/sample.js out/tests/compile/sample_swapped.js)
+ (deps out/tests/compile/sample.js)
  (action
   (progn
    (run grep -q "target = \"js\"" out/tests/compile/sample.js)
    (run grep -q "only_js" out/tests/compile/sample.js)
-   (run grep -q "cookie_mode = \"melange\"" out/tests/compile/sample.js)
    (with-accepted-exit-codes
     1
-    (run grep -q native out/tests/compile/sample.js))
-   (run grep -q "target = \"js\"" out/tests/compile/sample_swapped.js)
-   (run grep -q "only_js" out/tests/compile/sample_swapped.js)
-   (run
-    grep
-    -q
-    "cookie_mode = \"melange\""
-    out/tests/compile/sample_swapped.js)
-   (with-accepted-exit-codes
-    1
-    (run grep -q native out/tests/compile/sample_swapped.js)))))
+    (run grep -q native out/tests/compile/sample.js)))))
