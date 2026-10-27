@@ -6,16 +6,16 @@
   > 
   > EOF
 
-With -js flag everything keeps as it is and melange_only extension disappears
+With the melange compilation-mode cookie everything keeps as it is and melange_only extension disappears
 
-  $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let pstr_value_binding = Webapi.Dom.getElementById "foo"
   
   let make () =
     let pstr_value_binding_2 = Webapi.Dom.getElementById "foo" in
     ()
 
-Without -js flag, the compilation to native errors out indicating that a function must be used
+Without the cookie, the compilation to native errors out indicating that a function must be used
 
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl
   let pstr_value_binding =

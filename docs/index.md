@@ -8,7 +8,7 @@ The page uses Reason syntax. The ppx works the same way in OCaml syntax. See the
 
 ## Installation
 
-Add `ppx_platform` to the `pps` field of each dune stanza (`library`, `executable` or `melange.emit`). Use it in both the native and the Melange stanzas. The Melange one needs the `-js` flag:
+Add `ppx_platform` to the `pps` field of each dune stanza (`library`, `executable` or `melange.emit`). Use it in both the native and the Melange stanzas. Dune tells the ppx which target it compiles, so no flag is needed. This needs `(lang dune 3.26)` or later in `dune-project`:
 
 ```ocaml
 ; native executable
@@ -21,7 +21,7 @@ Add `ppx_platform` to the `pps` field of each dune stanza (`library`, `executabl
 (melange.emit
  (target app)
  (preprocess
-  (pps ppx_platform -- -js)))
+  (pps ppx_platform)))
 ```
 Without `ppx_platform` in `pps`, the compiler fails with `Uninterpreted extension 'melange_only'` on any `[%melange_only]` you write.
 
