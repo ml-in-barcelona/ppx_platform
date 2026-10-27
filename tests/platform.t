@@ -7,7 +7,7 @@ match%platform accepts Native and Melange
   > let b = match%platform () with Melange -> "melange" | Native -> "native"
   > EOF
 
-  $ ./standalone.exe -impl switch.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl switch.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let a = "melange"
   let b = "melange"
 
@@ -49,7 +49,7 @@ Attributes on items, fields and types
   > external e : int -> int = "e" [@@melange_only]
   > EOF
 
-  $ ./standalone.exe -impl attrs.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl attrs.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   include struct
     type t = Js.Json.t
   end [@@melange_only]
@@ -87,7 +87,7 @@ Attributes on items, fields and types
   > type t = { x : int [@melange_only]; y : int [@native_only] }
   > EOF
 
-  $ ./standalone.exe -intf attrs.mli -js | ocamlformat - --enable-outside-detected-project --intf
+  $ ./standalone.exe -intf attrs.mli -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --intf
   val a : int [@@melange_only]
   
   type t = { x : int [@melange_only] }
@@ -111,7 +111,7 @@ On expressions, the attribute of the target that drops it is an error
   
   let b = (1 [@native_only])
 
-  $ ./standalone.exe -impl attr_expr.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl attr_expr.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let a = (1 [@melange_only])
   
   let b =
@@ -129,7 +129,7 @@ let%melange_only and [%melange_only ...]
   > [%%melange_only let ( let+ ) = fun p f -> map f p]
   > EOF
 
-  $ ./standalone.exe -impl ext.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl ext.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let f (x : int) = x + 1
   let g ?(a = 1) b = a + b
   let h = Webapi.Dom.getElementById
@@ -187,7 +187,7 @@ A floating attribute at the start of a file drops the whole file
 
   $ ./standalone.exe -impl floating.ml | ocamlformat - --enable-outside-detected-project --impl
 
-  $ ./standalone.exe -impl floating.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl floating.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let x = 1
 
 The -melange flag is not registered: server-reason-react.ppx registers it, and
@@ -294,7 +294,7 @@ preprocessing of an attribute.
   [1]
 
   $ echo "let x = 1 [@@platform js]" > removed_attr.ml
-  $ ./standalone.exe -impl removed_attr.ml -js
+  $ ./standalone.exe -impl removed_attr.ml -cookie 'compilation-mode="melange"'
   File "removed_attr.ml", line 1, characters 10-25:
   1 | let x = 1 [@@platform js]
                 ^^^^^^^^^^^^^^^

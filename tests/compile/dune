@@ -1,35 +1,23 @@
-; The same source builds natively and with Melange. The ppx picks the code
-; of each target, and both builds link the runtime through ppx_runtime_libraries.
+; The same source builds natively and with Melange. Dune tells the ppx the
+; target of each build, so the ppx picks the code of that target.
 
 (library
- (name sample_native)
- (modules sample_native)
+ (name sample)
+ (modules sample)
+ (modes :standard melange)
  (preprocess
   (pps ppx_platform)))
-
-(rule
- (copy sample.ml sample_native.ml))
-
-(rule
- (copy sample.ml sample_js.ml))
-
-(library
- (name sample_js)
- (modes melange)
- (modules sample_js)
- (preprocess
-  (pps ppx_platform -- -js)))
 
 (melange.emit
  (target out)
  (modules)
- (libraries sample_js)
+ (libraries sample)
  (module_systems commonjs))
 
 (executable
  (name check)
  (modules check)
- (libraries sample_native ppx_platform.runtime))
+ (libraries sample ppx_platform.runtime))
 
 (rule
  (alias runtest)
@@ -38,3 +26,15 @@
   (with-stdout-to
    check.output
    (run ./check.exe))))
+
+(rule
+ (alias runtest)
+ (package ppx_platform)
+ (deps out/tests/compile/sample.js)
+ (action
+  (progn
+   (run grep -q "target = \"js\"" out/tests/compile/sample.js)
+   (run grep -q "only_js" out/tests/compile/sample.js)
+   (with-accepted-exit-codes
+    1
+    (run grep -q native out/tests/compile/sample.js)))))

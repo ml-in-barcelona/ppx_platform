@@ -38,7 +38,7 @@
 
   $ refmt --print ml input.re > input.ml
 
-  $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let valueFromEvent evt = (React.Event.Form.target evt)##value
   
   let getSortedWordCountsBrowserOnly (words : string array) =

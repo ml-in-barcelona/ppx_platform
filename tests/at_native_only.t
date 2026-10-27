@@ -14,9 +14,9 @@ Nested
   >  end
   > EOF
 
-With -js flag it picks the block with `[@@melange_only]`
+With the melange compilation-mode cookie it picks the block with `[@@melange_only]`
 
-  $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   module X = struct
     include struct
       type t = Js.Json.t
@@ -25,7 +25,7 @@ With -js flag it picks the block with `[@@melange_only]`
     end [@@melange_only]
   end
 
-Without -js flag, it picks the block with `[@@native_only]`
+Without the cookie, it picks the block with `[@@native_only]`
 
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl
   module X = struct
@@ -48,14 +48,14 @@ Pstr_include
   > end [@@native_only]
   > EOF
 
-With -js flag it picks the block with `[@@melange_only]`
+With the melange compilation-mode cookie it picks the block with `[@@melange_only]`
 
-  $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   include struct
     type t = Js.Json.t
   end [@@melange_only]
 
-Without -js flag, it picks the block with `[@@native_only]`
+Without the cookie, it picks the block with `[@@native_only]`
 
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl
   include struct
@@ -79,7 +79,7 @@ Use only one of the platforms
     type t = string
   end
 
-  $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   include struct
     type t = Js.Json.t
   end [@@melange_only]
@@ -105,7 +105,7 @@ Pstr_module
   end
   [@@native_only]
 
-  $ ./standalone.exe -impl input_module.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_module.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   module M = struct
     let x = 42
   end
@@ -121,7 +121,7 @@ Pstr_value
   $ ./standalone.exe -impl input_let.ml | ocamlformat - --enable-outside-detected-project --impl
   let y = 44 [@@native_only]
 
-  $ ./standalone.exe -impl input_let.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_let.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let x = 42 [@@melange_only]
 
 Pstr_open
@@ -134,7 +134,7 @@ Pstr_open
   $ ./standalone.exe -impl input_open.ml | ocamlformat - --enable-outside-detected-project --impl
   open List [@@native_only]
 
-  $ ./standalone.exe -impl input_open.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_open.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   open Printf [@@melange_only]
 
 Pstr_exception
@@ -147,7 +147,7 @@ Pstr_exception
   $ ./standalone.exe -impl input_exception.ml | ocamlformat - --enable-outside-detected-project --impl
   exception AnotherException of int [@@native_only]
 
-  $ ./standalone.exe -impl input_exception.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_exception.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   exception MyException of string [@@melange_only]
 
 Pstr_primitive
@@ -160,7 +160,7 @@ Pstr_primitive
   $ ./standalone.exe -impl input_primitive.ml | ocamlformat - --enable-outside-detected-project --impl
   external subtract : int -> int -> int = "caml_subtract_int" [@@native_only]
 
-  $ ./standalone.exe -impl input_primitive.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_primitive.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   external add : int -> int -> int = "caml_add_int" [@@melange_only]
 
 Pstr_eval (doesn't work)
@@ -182,7 +182,7 @@ Pstr_eval (doesn't work)
     3 [@@native_only]
   end
 
-  $ ./standalone.exe -impl input_primitive.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_primitive.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   include struct
     2 [@@melange_only]
   end
@@ -199,7 +199,7 @@ Pstr_type
   $ ./standalone.exe -impl input_type.ml | ocamlformat - --enable-outside-detected-project --impl
   type color = Red | Green | Blue [@@native_only]
 
-  $ ./standalone.exe -impl input_type.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_type.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   type point = { x : int; y : int } [@@melange_only]
 
 Pstr_recmodule
@@ -219,7 +219,7 @@ Pstr_recmodule
   end
   [@@native_only]
 
-  $ ./standalone.exe -impl input_recmodule.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_recmodule.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   module rec M = struct
     let x = 42
   end
@@ -242,7 +242,7 @@ Pstr_class
       inherit base 42
     end [@@native_only]
 
-  $ ./standalone.exe -impl input_class.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_class.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   class virtual ['a] base x =
     object
       method get = x
@@ -264,7 +264,7 @@ Pstr_class_type
     inherit base
   end [@@native_only]
 
-  $ ./standalone.exe -impl input_class_type.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input_class_type.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   class type base = object
     method get : int
   end [@@melange_only]
