@@ -8,3 +8,5 @@ end [@@melange_only]
 include struct
   let only_native = "native"
 end [@@native_only]
+
+let cookie_mode = [%compilation_mode]
