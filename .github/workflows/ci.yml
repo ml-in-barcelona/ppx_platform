@@ -72,6 +72,6 @@ jobs:
 
       - name: Lint
         if: matrix.os == 'ubuntu-latest'
-        uses: davesnx/dune-release-action/lint@v0.5.0
+        uses: davesnx/dune-release-action/lint@v0.6.0
         with:
           packages: 'ppx_platform'
