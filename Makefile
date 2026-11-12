@@ -13,39 +13,39 @@ help: ## Print this help message
 
 .PHONY: build
 build: ## Build the project, including non installable libraries and executables
-	$(DUNE) build --profile=dev
+	$(DUNE) build --root . --profile=dev
 
 .PHONY: dev
 dev: ## Build in watch mode
-	$(DUNE) build -w --profile=dev
+	$(DUNE) build --root . -w --profile=dev
 
 .PHONY: clean
 clean: ## Clean artifacts
-	$(DUNE) clean
+	$(DUNE) clean --root .
 
 .PHONY: test
 test: ## Run the tests
-	$(DUNE) build @runtest
+	$(DUNE) build --root . @runtest
 
 .PHONY: test-watch
 test-watch: ## Run the tests in watch mode
-	$(DUNE) build @runtest -w
+	$(DUNE) build --root . @runtest -w
 
 .PHONY: test-promote
 test-promote: ## Updates snapshots and promotes it to correct
-	$(DUNE) build @runtest --auto-promote
+	$(DUNE) build --root . @runtest --auto-promote
 
 .PHONY: format
 format: ## Format the codebase with ocamlformat
-	@DUNE_CONFIG__GLOBAL_LOCK=disabled $(DUNE) build @fmt --auto-promote
+	@DUNE_CONFIG__GLOBAL_LOCK=disabled $(DUNE) build --root . @fmt --auto-promote
 
 .PHONY: format-check
 format-check: ## Checks if format is correct
-	@DUNE_CONFIG__GLOBAL_LOCK=disabled $(DUNE) build @fmt
+	@DUNE_CONFIG__GLOBAL_LOCK=disabled $(DUNE) build --root . @fmt
 
 .PHONY: docs
 docs: ## Generate docs/index.md from doc/index.mld
-	$(DUNE) build @docs
+	$(DUNE) build --root . @docs
 
 .PHONY: create-switch
 create-switch: ## Create opam switch
