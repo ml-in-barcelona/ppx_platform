@@ -100,6 +100,16 @@ module [@native_only] X = struct
 end
 ```
 
+On an `external` with a function type, the native build defines a function of
+that type that raises `Ppx_platform.Melange_only`, so the external can stand
+behind an interface. It keeps the labels and gets no alert. The native build
+removes an external of any other type.
+
+```ocaml
+external set_attribute : Dom.element -> string -> string -> unit = "setAttribute"
+[@@mel.send] [@@melange_only]
+```
+
 ### `let%melange_only`
 
 For functions and let bindings that only get compiled by Melange and are meant
@@ -119,6 +129,14 @@ let%melange_only window_width () = Webapi.Dom.(window |> Window.innerWidth)
 
 let width () =
   try window_width () with Ppx_platform.Melange_only _ -> 0
+```
+
+With a function type as annotation, the native build defines the value from
+the type, whatever the body is. So a `[%mel.raw]` value works too, and the
+value keeps its type and labels to match an interface:
+
+```ocaml
+let%melange_only set_title : string -> unit = [%mel.raw "function (t) { document.title = t }"]
 ```
 
 `[%melange_only fun ...]` does the same for an expression:

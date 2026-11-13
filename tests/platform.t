@@ -80,6 +80,9 @@ Attributes on items, fields and types
   type v = A | C [@native_only]
   
   let native () = 2 [@@native_only]
+  
+  let e : int -> int = fun _ -> Ppx_platform.fail_melange_only "e"
+  [@@warning "-32"]
 
   $ cat > attrs.mli << EOF
   > val a : int [@@melange_only]
