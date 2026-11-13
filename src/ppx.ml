@@ -83,6 +83,22 @@ let rec last_expr_to_raise_melange_only ~loc original_name expr =
       { fn with pexp_attributes = expr.pexp_attributes }
   | _ -> [%expr Ppx_platform.fail_melange_only [%e Builder.estring ~loc original_name]]
 
+let raise_melange_only_from_type ~loc name typ =
+  let rec labels typ =
+    match typ.ptyp_desc with
+    | Ptyp_poly (_, typ) -> labels typ
+    | Ptyp_arrow (label, _, typ) -> label :: labels typ
+    | _ -> []
+  in
+  match labels typ with
+  | [] -> None
+  | labels ->
+      Some
+        (List.fold_right
+           (fun label body -> Builder.pexp_fun ~loc label None [%pat? _] body)
+           labels
+           [%expr Ppx_platform.fail_melange_only [%e Builder.estring ~loc name]])
+
 module Melange_only = struct
   let get_function_name pattern = match pattern with Ppat_var { txt = name; _ } -> name | _ -> "<unkwnown>"
 
@@ -181,20 +197,20 @@ module Melange_only = struct
              ])
     in
     let expression = { expression with pexp_attributes = expression.pexp_attributes @ [ remove_alert_only ~loc ] } in
+    let pattern = { pattern with ppat_attributes = [ alert ] } in
     let pattern =
       match type_constraint with
-      | Some type_constraint ->
-          Builder.ppat_constraint ~loc pattern { type_constraint with ptyp_attributes = [ alert ] }
-      | None -> { pattern with ppat_attributes = [ alert ] }
+      | Some type_constraint -> Builder.ppat_constraint ~loc pattern type_constraint
+      | None -> pattern
     in
     [%stri let[@warning "-27-32"] [%p pattern] = [%e expression]]
 
   let extractor_vb =
     let open Ast_pattern in
-    let extractor_in_let = pstr_value __ (value_binding ~pat:__ ~expr:__ ~constraint_:drop ^:: nil) in
+    let extractor_in_let = pstr_value __ (value_binding ~pat:__ ~expr:__ ~constraint_:__ ^:: nil) in
     pstr @@ extractor_in_let ^:: nil
 
-  let structure_item_handler ~ctxt rec_flag pattern expression =
+  let structure_item_handler ~ctxt rec_flag pattern expression constraint_ =
     let loc = Expansion_context.Extension.extension_point_loc ctxt in
     let do_nothing rec_flag =
       match rec_flag with
@@ -255,7 +271,13 @@ module Melange_only = struct
     match !mode with
     (* When it's -js, keep item as it is *)
     | Js -> do_nothing rec_flag
-    | Native -> add_melange_only_alert expression
+    | Native -> (
+        match constraint_ with
+        | Some (Pvc_constraint { locally_abstract_univars = []; typ }) -> (
+            match raise_melange_only_from_type ~loc (get_function_name pattern.ppat_desc) typ with
+            | Some item -> make_vb_with_melange_only ~loc ~type_constraint:typ pattern item
+            | None -> add_melange_only_alert expression)
+        | _ -> add_melange_only_alert expression)
 
   let structure_item_rule =
     Context_free.Rule.extension
@@ -332,10 +354,22 @@ module Preprocess = struct
     | Pstr_open { popen_attributes = attrs; _ }
     | Pstr_include { pincl_attributes = attrs; _ }
     | Pstr_exception { ptyexn_attributes = attrs; _ }
-    | Pstr_primitive { pval_attributes = attrs; _ }
     | Pstr_eval (_, attrs)
     | Pstr_module { pmb_attributes = attrs; _ } ->
         if should_keep attrs = `keep then Some stri else None
+    | Pstr_primitive ({ pval_attributes = attrs; _ } as value) -> (
+        match (should_keep attrs, !mode) with
+        | `keep, _ -> Some stri
+        | `drop, Js -> None
+        | `drop, Native ->
+            let loc = stri.pstr_loc in
+            let name = value.pval_name.txt in
+            Option.map
+              (fun expr ->
+                [%stri
+                  let[@warning "-32"] [%p Builder.ppat_constraint ~loc (Builder.pvar ~loc name) value.pval_type] =
+                    [%e expr]])
+              (raise_melange_only_from_type ~loc name value.pval_type))
     | Pstr_value (_, vbs) -> if should_keep_many vbs (fun vb -> vb.pvb_attributes) = `keep then Some stri else None
     | Pstr_type (recflag, tds) ->
         if should_keep_many tds (fun td -> td.ptype_attributes) = `keep then

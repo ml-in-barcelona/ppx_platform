@@ -158,6 +158,9 @@ Pstr_primitive
   > EOF
 
   $ ./standalone.exe -impl input_primitive.ml | ocamlformat - --enable-outside-detected-project --impl
+  let add : int -> int -> int = fun _ _ -> Ppx_platform.fail_melange_only "add"
+  [@@warning "-32"]
+  
   external subtract : int -> int -> int = "caml_subtract_int" [@@native_only]
 
   $ ./standalone.exe -impl input_primitive.ml -js | ocamlformat - --enable-outside-detected-project --impl

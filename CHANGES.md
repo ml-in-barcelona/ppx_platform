@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- In the native build, an `external ... [@@melange_only]` with a function type and a `let%melange_only x : t = ...` whose
+  annotation is a function type become a function of that type that raises `Ppx_platform.Melange_only`. Before, the
+  external was removed and the body was kept, so neither could stand behind an interface. The annotation and the labels
+  stay. The `melange_only` alert of an annotated binding is now on its name, not on its type (warning 53).
 - Add the odoc documentation page `doc/index.mld`, moved from server-reason-react. It shows the package page on ocaml.org.
 - Add `make docs` (`dune build @docs`). It writes `docs/index.md`. CI checks that it is current.
 
