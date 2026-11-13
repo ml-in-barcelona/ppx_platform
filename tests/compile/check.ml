@@ -1,6 +1,6 @@
 let () =
-  assert (Sample_native.target = "native");
-  assert (Sample_native.only_native = "native");
-  match (Sample_native.click_handler [@alert "-melange_only"]) 1 with
+  assert (Sample.target = "native");
+  assert (Sample.only_native = "native");
+  match (Sample.click_handler [@alert "-melange_only"]) 1 with
   | _ -> assert false
   | exception Ppx_platform.Melange_only _ -> ()

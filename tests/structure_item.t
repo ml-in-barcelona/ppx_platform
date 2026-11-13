@@ -23,9 +23,9 @@
   > 
   > EOF
 
-With -js flag everything keeps as it is and melange_only extension disappears
+With the melange compilation-mode cookie everything keeps as it is and melange_only extension disappears
 
-  $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let ( let+ ) p f = map f p
   let pexp_ident = Webapi__Dom__Element.asHtmlElement
   let pexp_fun_1arg_structure_item evt = Webapi.Dom.getElementById "foo"

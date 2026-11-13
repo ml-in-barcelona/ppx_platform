@@ -21,15 +21,19 @@ Native library or executable:
   (pps ppx_platform)))
 ```
 
-Melange library needs the `-js` flag to the ppx.
+Dune tells the ppx which target it compiles, so a library built for both native and Melange needs no flag. This needs
+`(lang dune 3.26)` or later in `dune-project`.
 
 ```dune
 (library
- (name my_lib_js)
- (modes melange)
+ (name my_lib)
+ (modes :standard melange)
  (preprocess
-  (pps ppx_platform -- -js)))
+  (pps ppx_platform)))
 ```
+
+Dune passes the ppxlib cookie `compilation-mode`, with the value `"ocaml"` or `"melange"`. Without the cookie, the ppx
+compiles for native. With an older dune, the ppx has no cookie and compiles Melange builds as native.
 
 ## Syntax
 

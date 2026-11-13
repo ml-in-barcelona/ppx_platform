@@ -18,9 +18,9 @@
   > 
   > EOF
 
-With -js flag everything keeps as it is and melange_only extension disappears
+With the melange compilation-mode cookie everything keeps as it is and melange_only extension disappears
 
-  $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  $ ./standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | ocamlformat - --enable-outside-detected-project --impl
   let make () =
     let fun_value_binding_pexp_fun_2arg evt moar_arguments =
       let a = "foo" in
@@ -36,7 +36,7 @@ With -js flag everything keeps as it is and melange_only extension disappears
     in
     ()
 
-Without -js flag, the compilation to native replaces the expression with a raise
+Without the cookie, the compilation to native replaces the expression with a raise
 
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl > output.ml
 

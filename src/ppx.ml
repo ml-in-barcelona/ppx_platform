@@ -52,12 +52,7 @@ module Platform = struct
             match cases with
             | [ first; second ] -> (
                 match collect_expressions ~loc first second with
-                | Ok (server_expr, client_expr) -> (
-                    match !mode with
-                    (* When it's -js keep the client_expr *)
-                    | Js -> client_expr
-                    (* When it's isn't -js keep the server_expr *)
-                    | Native -> server_expr)
+                | Ok (server_expr, client_expr) -> ( match !mode with Js -> client_expr | Native -> server_expr)
                 | Error error_msg_expr -> error_msg_expr)
             | _ -> switch_platform_requires_a_match ~loc)
         | _ -> switch_platform_requires_a_match ~loc)
@@ -252,10 +247,7 @@ module Melange_only = struct
       | _expr -> do_nothing rec_flag
     in
 
-    match !mode with
-    (* When it's -js, keep item as it is *)
-    | Js -> do_nothing rec_flag
-    | Native -> add_melange_only_alert expression
+    match !mode with Js -> do_nothing rec_flag | Native -> add_melange_only_alert expression
 
   let structure_item_rule =
     Context_free.Rule.extension
@@ -453,7 +445,13 @@ module Removed = struct
 end
 
 let () =
-  Driver.add_arg "-js" (Unit (fun () -> mode := Js)) ~doc:"preprocess for js build";
+  Driver.Cookies.add_handler (fun cookies ->
+      match Driver.Cookies.get cookies "compilation-mode" Ast_pattern.(estring __) with
+      | None | Some "ocaml" -> mode := Native
+      | Some "melange" -> mode := Js
+      | Some other ->
+          Location.raise_errorf ~loc:Location.none
+            "ppx_platform: unknown compilation-mode %S, expected \"ocaml\" or \"melange\"" other);
   let rules = (Platform.rule :: Melange_only.rules) @ Removed.rules in
   Driver.V2.register_transformation "ppx_platform" ~rules
     ~impl:(fun _ structure ->

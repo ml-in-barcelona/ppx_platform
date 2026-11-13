@@ -1,1 +1,7 @@
 x-ci-accept-failures: ["cygwin-mingw"]
+pin-depends: [
+  [
+    "dune.dev"
+    "git+https://github.com/anmonteiro/dune.git#9e15502dcccd96a5bd66bbbb66eb6e9b937b06e2"
+  ]
+]

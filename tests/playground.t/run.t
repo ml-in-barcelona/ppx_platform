@@ -1,6 +1,6 @@
   $ refmt --print ml ./input.re > input.ml
 
-  $ ../standalone.exe -impl input.ml -js | refmt --parse ml --print re
+  $ ../standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | refmt --parse ml --print re
   let makeQuery = (~abortController, ~encoding=?, pathname, req, input) => {
     let signal =
       abortController->Option.map(abortController =>

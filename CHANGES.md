@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Breaking: remove the `-js` driver flag. The ppx now reads the ppxlib cookie `compilation-mode` that dune passes
+  with `(lang dune 3.26)` or later: `"melange"` selects Melange, `"ocaml"` or no cookie selects native. Replace
+  `(pps ppx_platform -- -js)` with `(pps ppx_platform)`. An unknown value is an error.
 - Add the odoc documentation page `doc/index.mld`, moved from server-reason-react. It shows the package page on ocaml.org.
 - Add `make docs` (`dune build @docs`). It writes `docs/index.md`. CI checks that it is current.
 

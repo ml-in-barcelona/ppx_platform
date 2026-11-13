@@ -26,7 +26,7 @@
 
   $ refmt --print ml input.re > input.ml
 
-  $ ./standalone.exe -impl input.ml -js | refmt --parse ml --print re
+  $ ./standalone.exe -impl input.ml -cookie 'compilation-mode="melange"' | refmt --parse ml --print re
   let make = () => {
     let discard: Js.Promise.t(unit) => unit = value => ignore(value);
     ();

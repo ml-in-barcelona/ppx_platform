@@ -1,8 +1,6 @@
-(lang dune 3.9)
+(lang dune 3.26)
 
-(using melange 0.1)
-
-(using directory-targets 0.1)
+(using melange 1.0)
 
 (cram enable)
 
