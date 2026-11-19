@@ -43,14 +43,17 @@ Without -js flag, the compilation to native replaces the expression with a raise
   $ cat output.ml
   let make () =
     let fun_value_binding_pexp_fun_2arg evt =
+      let _ = evt in
       Ppx_platform.fail_melange_only "fun_value_binding_pexp_fun_2arg"
         [@@alert "-melange_only"]
     in
     let fun_value_binding_pexp_fun_default_expr ?evt =
+      let _ = evt in
       Ppx_platform.fail_melange_only "fun_value_binding_pexp_fun_default_expr"
         [@@alert "-melange_only"]
     in
     let fun_value_binding_pexp_fun_2arg evt =
+      let _ = evt in
       Ppx_platform.fail_melange_only "fun_value_binding_pexp_fun_2arg"
         [@@alert "-melange_only"]
     in

@@ -143,16 +143,22 @@ let%melange_only and [%melange_only ...]
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun x -> Ppx_platform.fail_melange_only "f") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+   (fun x ->
+    let _ = x in
+    Ppx_platform.fail_melange_only "f")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
   
   let (g
        [@alert
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?a -> Ppx_platform.fail_melange_only "g") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+   (fun ?a ->
+    let _ = a in
+    Ppx_platform.fail_melange_only "g")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
   
   let (h
        [@alert
@@ -160,9 +166,11 @@ let%melange_only and [%melange_only ...]
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
     Obj.magic () [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
-  let on_click event = Ppx_platform.fail_melange_only "event"
+  let on_click event =
+    let _ = event in
+    Ppx_platform.fail_melange_only "event"
   
   let not_a_function =
     [%ocaml.error
@@ -175,8 +183,11 @@ let%melange_only and [%melange_only ...]
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun p -> Ppx_platform.fail_melange_only "let+") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+   (fun p ->
+    let _ = p in
+    Ppx_platform.fail_melange_only "let+")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
 
 A floating attribute at the start of a file drops the whole file
 

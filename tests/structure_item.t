@@ -52,8 +52,11 @@ With -js flag everything keeps as it is and melange_only extension disappears
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun p -> Ppx_platform.fail_melange_only "let+") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+   (fun p ->
+    let _ = p in
+    Ppx_platform.fail_melange_only "let+")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
   
   let (pexp_ident
        [@alert
@@ -61,7 +64,7 @@ With -js flag everything keeps as it is and melange_only extension disappears
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
     Obj.magic () [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (pexp_fun_1arg_structure_item
        [@alert
@@ -69,9 +72,10 @@ With -js flag everything keeps as it is and melange_only extension disappears
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun evt ->
+    let _ = evt in
     Ppx_platform.fail_melange_only "pexp_fun_1arg_structure_item")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (pexp_fun_2arg_structure_item
        [@alert
@@ -79,9 +83,10 @@ With -js flag everything keeps as it is and melange_only extension disappears
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun evt ->
+    let _ = evt in
     Ppx_platform.fail_melange_only "pexp_fun_2arg_structure_item")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (pexp_fun_2arg_structure_item
        [@alert
@@ -89,9 +94,10 @@ With -js flag everything keeps as it is and melange_only extension disappears
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun evt ->
+    let _ = evt in
     Ppx_platform.fail_melange_only "pexp_fun_2arg_structure_item")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (perform
        [@alert
@@ -99,9 +105,10 @@ With -js flag everything keeps as it is and melange_only extension disappears
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun ?abortController ->
+    let _ = abortController in
     Ppx_platform.fail_melange_only "perform")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
 Replace Ppx_platform.fail_melange_only with print_endline so ocamlc can compile it without the runtime library dependency
   $ echo "module Ppx_platform = struct" >> output.ml
   $ cat $INSIDE_DUNE/src/runtime/ppx_platform.ml >> output.ml
