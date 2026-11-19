@@ -233,6 +233,34 @@ Ppat_constraint
   $ ./standalone.exe -impl input_constr.ml | ocamlformat - --enable-outside-detected-project --impl
   let foo ~on:_ ?opt:(_ = 42) = 0
 
+Pexp_open drops the local open and keeps the body
+
+  $ cat > input_pexp_open.ml << EOF
+  > let f () =
+  >   let open [@melange_only] Webapi.Dom in
+  >   42
+  > EOF
+
+  $ ./standalone.exe -impl input_pexp_open.ml | ocamlformat - --enable-outside-detected-project --impl
+  let f () = 42
+
+  $ ./standalone.exe -impl input_pexp_open.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  let f () =
+    (let open Webapi.Dom in
+     42) [@melange_only]
+
+  $ ./standalone.exe -impl input_pexp_open.ml > input_pexp_open_server.ml && ocamlc -c input_pexp_open_server.ml
+
+  $ cat > input_pexp_open.re << EOF
+  > let f = () => {
+  >   [@melange_only] open Webapi.Dom;
+  >   42;
+  > };
+  > EOF
+  $ refmt --print ml input_pexp_open.re > input_pexp_open_re.ml
+  $ ./standalone.exe -impl input_pexp_open_re.ml | ocamlformat - --enable-outside-detected-project --impl
+  let f () = 42
+
 Pexp_* should be throw an error
 
   $ cat > input_let.ml << EOF

@@ -268,3 +268,22 @@ Pstr_class_type
   class type base = object
     method get : int
   end [@@melange_only]
+
+Pexp_open
+
+  $ cat > input_pexp_open.ml << EOF
+  > let f () =
+  >   let open [@native_only] Unix in
+  >   let open [@melange_only] Webapi.Dom in
+  >   42
+  > EOF
+
+  $ ./standalone.exe -impl input_pexp_open.ml | ocamlformat - --enable-outside-detected-project --impl
+  let f () =
+    (let open Unix in
+     42) [@native_only]
+
+  $ ./standalone.exe -impl input_pexp_open.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  let f () =
+    (let open Webapi.Dom in
+     42) [@melange_only]

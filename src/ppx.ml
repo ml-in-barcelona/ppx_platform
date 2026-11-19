@@ -694,6 +694,9 @@ module Preprocess = struct
                       ] );
             }
         | Native, Pexp_extension ({ txt; _ }, _) when String.equal txt melange_only -> expr
+        | _, Pexp_open (od, body)
+          when should_keep expr.pexp_attributes = `drop || should_keep od.popen_attributes = `drop ->
+            self#expression body
         | _ -> (
             let expr = super#expression expr in
             let loc = expr.pexp_loc in

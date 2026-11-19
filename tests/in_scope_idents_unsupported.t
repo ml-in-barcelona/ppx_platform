@@ -197,3 +197,92 @@ Confirm that opaque include/open cases did NOT emit unbound identifiers:
     Ppx_platform.fail_melange_only "use_named_sig_include")
     [@alert "-melange_only"]
   [@@warning "-32"]
+
+Adding [@melange_only] / [@@melange_only] resolves all open/include/module/type/exception
+warnings on native (0 warnings under -w +A):
+
+  $ cat > resolved.mli << 'EOF'
+  > val use_ext_open : unit -> unit [@@alert melange_only]
+  > val use_local_open : unit -> unit
+  > val use_opaque_alias_open : unit -> unit [@@alert melange_only]
+  > val use_named_sig_open : unit -> unit [@@alert melange_only]
+  > val use_ext_include : unit -> unit [@@alert melange_only]
+  > val use_named_sig_include : unit -> unit [@@alert melange_only]
+  > val use_functor_include : unit -> unit [@@alert melange_only]
+  > val use_named_sig_module : unit -> unit [@@alert melange_only]
+  > val use_non_values : unit -> unit [@@alert melange_only]
+  > EOF
+
+  $ cat > resolved_input.ml << 'EOF'
+  > (* 1. Top-level open -> [@@melange_only] *)
+  > open Ext_helpers [@@melange_only]
+  > 
+  > let%melange_only use_ext_open () = from_ext_open ()
+  > 
+  > (* 2. Local let open -> [@melange_only] drops the open and keeps the body *)
+  > let use_local_open () =
+  >   let open [@melange_only] Ext_helpers in
+  >   let f = [%melange_only fun () -> from_ext_local_open ()] in
+  >   ignore f
+  > 
+  > (* 3. open of local alias -> [@@melange_only] on both *)
+  > module Ext_alias = Ext_helpers [@@melange_only]
+  > open Ext_alias [@@melange_only]
+  > 
+  > let%melange_only use_opaque_alias_open () = from_ext_alias_open ()
+  > 
+  > (* 4. open of named-sig local module -> [@@melange_only] on both *)
+  > module Named_sig_opened : Ext_helpers.S = struct
+  >   let from_named_sig () = ()
+  > end [@@melange_only]
+  > open Named_sig_opened [@@melange_only]
+  > 
+  > let%melange_only use_named_sig_open () = from_named_sig ()
+  > 
+  > (* 5. include of external module -> [@@melange_only] *)
+  > include Ext_helpers [@@melange_only]
+  > 
+  > let%melange_only use_ext_include () = from_ext_include ()
+  > 
+  > (* 6. include of named-sig struct -> [@@melange_only] *)
+  > include (
+  >   struct
+  >     let secret_hidden = 1
+  >     let from_named_sig () = ()
+  >   end : Ext_helpers.S) [@@melange_only]
+  > 
+  > let%melange_only use_named_sig_include () =
+  >   from_named_sig ();
+  >   Js.log secret_hidden
+  > 
+  > (* 7. include of functor application -> [@@melange_only] *)
+  > include Ext_helpers.Make (struct end) [@@melange_only]
+  > 
+  > let%melange_only use_functor_include () = from_functor_include ()
+  > 
+  > (* 8. Local module constrained by named external sig -> [@@melange_only] *)
+  > module Named_sig_mod : Ext_helpers.S = struct
+  >   let from_named_sig () = ()
+  >   let priv = 2
+  > end [@@melange_only]
+  > 
+  > let%melange_only use_named_sig_module () = Named_sig_mod.from_named_sig ()
+  > 
+  > (* 9. Non-value declarations -> [@@melange_only] / [@melange_only] *)
+  > type client_type = int [@@melange_only]
+  > type action = Shared | Client_only [@melange_only]
+  > type state = { shared : int; client_only : string [@melange_only] }
+  > exception Client_exn [@@melange_only]
+  > 
+  > let _ = (Shared, { shared = 1 }.shared)
+  > 
+  > let%melange_only use_non_values () =
+  >   let (_ : client_type) = 1 in
+  >   let s = { shared = 1; client_only = "hi" } in
+  >   if false then raise Client_exn;
+  >   Js.log (Client_only, s.client_only)
+  > EOF
+
+  $ ./standalone.exe -impl resolved_input.ml | ocamlformat - --enable-outside-detected-project --impl > resolved.ml
+  $ ocamlc -c -w +A resolved.mli
+  $ ocamlc -c -w +A -I . resolved.ml
