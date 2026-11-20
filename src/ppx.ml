@@ -68,7 +68,8 @@ end
 
 let remove_type_constraint pattern =
   match pattern with
-  | { ppat_desc = Ppat_constraint ({ ppat_desc = Ppat_unpack _; _ }, _); _ } -> pattern
+  | { ppat_desc = Ppat_constraint ({ ppat_desc = Ppat_unpack _; _ }, _) | Ppat_unpack _; _ } ->
+      { pattern with ppat_desc = Ppat_any }
   | { ppat_desc = Ppat_constraint (pattern, _); _ } -> pattern
   | _ -> pattern
 

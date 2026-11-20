@@ -26,6 +26,13 @@
   > let%melange_only fcm1 (module M : S) a = M.x + a
   > 
   > let%melange_only fcm2 a (module M : S) = M.x + a
+  > 
+  > module type Js_only = sig
+  >   val x : int
+  > end
+  > [@@melange_only]
+  > 
+  > let%melange_only fcm3 (module M : Js_only) = M.x
   > EOF
 
   $ cat > input.mli << EOF
@@ -122,9 +129,7 @@
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun (module M : S) a ->
-    Ppx_platform.fail_melange_only "fcm1")
-    [@alert "-melange_only"]
+   (fun _ a -> Ppx_platform.fail_melange_only "fcm1") [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let (fcm2
@@ -132,9 +137,15 @@
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun a (module M : S) ->
-    Ppx_platform.fail_melange_only "fcm2")
-    [@alert "-melange_only"]
+   (fun a _ -> Ppx_platform.fail_melange_only "fcm2") [@alert "-melange_only"]
+  [@@warning "-27-32"]
+  
+  let (fcm3
+       [@alert
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
+   (fun _ -> Ppx_platform.fail_melange_only "fcm3") [@alert "-melange_only"]
   [@@warning "-27-32"]
 
 The native output keeps every parameter in its inferred type
@@ -151,8 +162,9 @@ The native output keeps every parameter in its inferred type
   val make : unit -> 'a -> 'b -> 'c
   val expression : 'a -> 'b -> 'c
   module type S = sig val x : int end
-  val fcm1 : (module S) -> 'a -> 'b
-  val fcm2 : 'a -> (module S) -> 'b
+  val fcm1 : 'a -> 'b -> 'c
+  val fcm2 : 'a -> 'b -> 'c
+  val fcm3 : 'a -> 'b
 
 The native output type-checks against the full signature
 
