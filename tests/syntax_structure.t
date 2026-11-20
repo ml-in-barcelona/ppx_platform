@@ -486,12 +486,12 @@ stub.
   let applied = print_endline "runs on native"
   let bracket_applied = print_endline "runs on native"
 
-B. On Native the stub drops the type annotation and every parameter after the
-first, so the Native output has a more general type than the Melange output.
-An .mli hides this (section 1); without one the inferred interfaces differ:
+B. On Native the stub drops the type annotations, so the Native output has a
+more general type than the Melange output. An .mli hides this (section 1);
+without one the inferred interfaces differ:
 
   $ ocamlc -i -I native native/top.ml | grep 'two\|annotated'
-  val two : 'a -> 'b
+  val two : 'a -> 'b -> 'c
   val annotated : 'a -> 'b
   val annotated_params : 'a -> 'b
   $ ocamlc -i -I js js/top.ml | grep 'two\|annotated'

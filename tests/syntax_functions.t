@@ -21,8 +21,8 @@ stub in mel/. Each input has an .mli that fixes the types of the native output.
 1. Parameter forms of a discarded top-level function: one positional
 parameter, labelled, labelled with a type, labelled with a pattern, optional,
 optional with a default, unit, tuple and record destructuring. The native
-function keeps the first parameter, without its type and default, and ignores
-the names that it binds.
+function keeps every parameter, without its type and default, and ignores
+the names that they bind.
 
   $ cat > params.mli << 'EOF'
   > val one : int -> unit [@@alert melange_only]
@@ -59,17 +59,18 @@ the names that it binds.
    (fun ~x ->
     let _ = x in
     Ppx_platform.fail_melange_only "labelled")
-   (fun ~x ->
+   (fun ~x ~y ->
     let _ = x in
+    let _ = y in
     Ppx_platform.fail_melange_only "labelled_typed")
    (fun ~x:(a, b) ->
     let _ = a in
     let _ = b in
     Ppx_platform.fail_melange_only "labelled_pat")
-   (fun ?x ->
+   (fun ?x () ->
     let _ = x in
     Ppx_platform.fail_melange_only "optional")
-   (fun ?x ->
+   (fun ?x () ->
     let _ = x in
     Ppx_platform.fail_melange_only "optional_default")
    (fun () ->
@@ -149,20 +150,21 @@ annotations; the .mli checks that the types still match. The .mli exports
   58: (fun x ->
   59:  let _ = x in
   60:  Ppx_platform.fail_melange_only "explicit_fun")
-  69: (fun a ->
+  69: (fun a b ->
   70:  let _ = a in
-  71:  Ppx_platform.fail_melange_only "annotated")
-  80: (fun x y ->
-  81:  let _ = x in
-  82:  let _ = y in
-  83:  Ppx_platform.fail_melange_only "nested")
-  92: (fun x ->
-  93:  let _ = x in
-  94:  Ppx_platform.fail_melange_only "returns_fun")
-  105:  Obj.magic () [@alert "-melange_only"]
-  113: (fun x ->
-  114:  let _ = x in
-  115:  Ppx_platform.fail_melange_only "with_attrs")
+  71:  let _ = b in
+  72:  Ppx_platform.fail_melange_only "annotated")
+  81: (fun x y ->
+  82:  let _ = x in
+  83:  let _ = y in
+  84:  Ppx_platform.fail_melange_only "nested")
+  93: (fun x ->
+  94:  let _ = x in
+  95:  Ppx_platform.fail_melange_only "returns_fun")
+  106:  Obj.magic () [@alert "-melange_only"]
+  114: (fun x ->
+  115:  let _ = x in
+  116:  Ppx_platform.fail_melange_only "with_attrs")
 
 The binding attributes [@@inline] and [@@ocaml.doc] are replaced by
 [@@warning "-32"] on native; on Melange they stay.
@@ -394,7 +396,7 @@ an enclosing local, also in a parameter after the first, keep that local used.
   
   let default_outer_local x =
     let base = x + 1 in
-    let f ?y =
+    let f ?y () =
       let _ = base in
       let _ = y in
       Ppx_platform.fail_melange_only "f"
@@ -404,16 +406,18 @@ an enclosing local, also in a parameter after the first, keep that local used.
   
   let later_default x =
     let base = x + 1 in
-    let f () =
+    let f () ?y () =
       let _ = base in
+      let _ = y in
       Ppx_platform.fail_melange_only "f"
         [@@alert "-melange_only"]
     in
     ignore f
   
   let later_labelled_default x =
-    let f ~a =
+    let f ~a ?b () =
       let _ = a in
+      let _ = b in
       let _ = x in
       Ppx_platform.fail_melange_only "f"
         [@@alert "-melange_only"]
@@ -432,13 +436,8 @@ an enclosing local, also in a parameter after the first, keep that local used.
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only enclosing_js.mli
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I . -I mel enclosing_js.ml
 
-Known issues
-
-The outputs below record the current, wrong behaviour.
-
-4. Only the first parameter is kept. A discarded function with several
-positional parameters becomes a one-parameter function on native. The .mli
-still matches because the result type is a type variable.
+4. Several positional parameters. A discarded top-level function keeps every
+parameter and ignores the names that they bind.
 
   $ cat > several.mli << 'EOF'
   > val several : int -> string -> bool -> unit [@@alert melange_only]
@@ -447,13 +446,23 @@ still matches because the result type is a type variable.
   > let%melange_only several a b c = Js.log (a, b, c)
   > EOF
   $ ./standalone.exe -impl several_input.ml | ocamlformat - --enable-outside-detected-project --impl > several_native.ml
+  $ ./standalone.exe -impl several_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > several_js.ml
   $ sed -n '/^ (fun/,/fail_melange_only/p' several_native.ml
-   (fun a ->
+   (fun a b c ->
     let _ = a in
+    let _ = b in
+    let _ = c in
     Ppx_platform.fail_melange_only "several")
   $ cp several.mli several_native.mli
+  $ cp several.mli several_js.mli
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only several_native.mli
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only -I . several_native.ml
+  $ ocamlc -c -w +A -warn-error +A -alert -melange_only several_js.mli
+  $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I . -I mel several_js.ml
+
+Known issues
+
+The outputs below record the current, wrong behaviour.
 
 5. `?x:(pattern = default)` with a pattern that is not a variable. The native
 output drops the default but keeps the pattern, so the pattern must match an
@@ -469,7 +478,7 @@ such as `?x:_`.
   $ ./standalone.exe -impl optional_pattern_input.ml | ocamlformat - --enable-outside-detected-project --impl > optional_pattern_native.ml
   $ ./standalone.exe -impl optional_pattern_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > optional_pattern_js.ml
   $ sed -n '/^ (fun/,/fail_melange_only/p' optional_pattern_native.ml
-   (fun ?x:(a, b) ->
+   (fun ?x:(a, b) () ->
     let _ = a in
     let _ = b in
     Ppx_platform.fail_melange_only "optional_pat_default")
@@ -478,7 +487,7 @@ such as `?x:_`.
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only optional_pattern_native.mli
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only -I . optional_pattern_native.ml
   File "optional_pattern_native.ml", line 6, characters 10-14:
-  6 |  (fun ?x:(a, b) ->
+  6 |  (fun ?x:(a, b) () ->
                 ^^^^
   Error: This pattern matches values of type 'a * 'b
          but a pattern was expected which matches values of type 'c option
@@ -486,43 +495,90 @@ such as `?x:_`.
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only optional_pattern_js.mli
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I . -I mel optional_pattern_js.ml
 
-6. A top-level `let%melange_only` whose function starts with `(type a)`, and a
-top-level `let%melange_only` whose right-hand side is an application, are kept
-unchanged on native, with Melange code and no melange_only alert. Expected: a
-fail_melange_only stub with the alert, as for other functions.
+6. A top-level `let%melange_only` whose function has `(type a)` parameters
+becomes a stub that keeps `(type a)` but drops the annotations that use it, so
+native fails with warning 34 (unused type). A top-level `let%melange_only`
+whose right-hand side is an application is kept unchanged on native, with
+Melange code and no melange_only alert. Expected: a fail_melange_only stub with
+the alert that compiles, as for other functions.
 
-  $ cat > top_kept.mli << 'EOF'
+  $ cat > top_newtype.mli << 'EOF'
   > val newtype : 'a -> 'a list [@@alert melange_only]
   > val newtype_two : 'a -> 'b -> unit [@@alert melange_only]
   > val newtype_fun : 'a -> unit [@@alert melange_only]
   > val poly_newtype : 'a -> unit [@@alert melange_only]
-  > val partial : int -> unit [@@alert melange_only]
   > EOF
-  $ cat > top_kept_input.ml << 'EOF'
+  $ cat > top_newtype_input.ml << 'EOF'
   > let%melange_only newtype (type a) (x : a) : a list = Js.log x; [ x ]
   > let%melange_only newtype_two (type a b) (x : a) (y : b) = Js.log (x, y)
   > let%melange_only newtype_fun = fun (type a) (x : a) -> Js.log x
   > let%melange_only poly_newtype : 'a. 'a -> unit = fun (type a) (x : a) -> Js.log x
+  > EOF
+  $ ./standalone.exe -impl top_newtype_input.ml | ocamlformat - --enable-outside-detected-project --impl > top_newtype_native.ml
+  $ ./standalone.exe -impl top_newtype_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > top_newtype_js.ml
+  $ sed -n '/^ (fun/,/fail_melange_only/p' top_newtype_native.ml
+   (fun (type a) x ->
+    let _ = x in
+    Ppx_platform.fail_melange_only "newtype")
+   (fun (type a) (type b) x y ->
+    let _ = x in
+    let _ = y in
+    Ppx_platform.fail_melange_only "newtype_two")
+   (fun (type a) x ->
+    let _ = x in
+    Ppx_platform.fail_melange_only "newtype_fun")
+   (fun (type a) x ->
+    let _ = x in
+    Ppx_platform.fail_melange_only "poly_newtype")
+  $ cp top_newtype.mli top_newtype_native.mli
+  $ cp top_newtype.mli top_newtype_js.mli
+  $ ocamlc -c -w +A -warn-error +A -alert @melange_only top_newtype_native.mli
+  $ ocamlc -c -w +A -warn-error +A -alert @melange_only -I . top_newtype_native.ml
+  File "top_newtype_native.ml", line 6, characters 12-13:
+  6 |  (fun (type a) x ->
+                  ^
+  Error (warning 34 [unused-type-declaration]): unused type a.
+  
+  File "top_newtype_native.ml", line 17, characters 12-13:
+  17 |  (fun (type a) (type b) x y ->
+                   ^
+  Error (warning 34 [unused-type-declaration]): unused type a.
+  
+  File "top_newtype_native.ml", line 17, characters 21-22:
+  17 |  (fun (type a) (type b) x y ->
+                            ^
+  Error (warning 34 [unused-type-declaration]): unused type b.
+  
+  File "top_newtype_native.ml", line 29, characters 12-13:
+  29 |  (fun (type a) x ->
+                   ^
+  Error (warning 34 [unused-type-declaration]): unused type a.
+  
+  File "top_newtype_native.ml", line 40, characters 12-13:
+  40 |  (fun (type a) x ->
+                   ^
+  Error (warning 34 [unused-type-declaration]): unused type a.
+  [2]
+  $ ocamlc -c -w +A -warn-error +A -alert -melange_only top_newtype_js.mli
+  $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I . -I mel top_newtype_js.ml
+
+  $ cat > top_kept.mli << 'EOF'
+  > val partial : int -> unit [@@alert melange_only]
+  > EOF
+  $ cat > top_kept_input.ml << 'EOF'
   > let%melange_only partial = Js.log2 1
   > EOF
   $ ./standalone.exe -impl top_kept_input.ml | ocamlformat - --enable-outside-detected-project --impl > top_kept_native.ml
   $ ./standalone.exe -impl top_kept_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > top_kept_js.ml
   $ cat top_kept_native.ml
-  let newtype (type a) (x : a) : a list =
-    Js.log x;
-    [ x ]
-  
-  let newtype_two (type a) (type b) (x : a) (y : b) = Js.log (x, y)
-  let newtype_fun (type a) (x : a) = Js.log x
-  let poly_newtype : 'a. 'a -> unit = fun (type a) (x : a) -> Js.log x
   let partial = Js.log2 1
   $ cp top_kept.mli top_kept_native.mli
   $ cp top_kept.mli top_kept_js.mli
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only top_kept_native.mli
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only -I . top_kept_native.ml
-  File "top_kept_native.ml", line 2, characters 2-4:
-  2 |   Js.log x;
-        ^^
+  File "top_kept_native.ml", line 1, characters 14-16:
+  1 | let partial = Js.log2 1
+                    ^^
   Error: Unbound module Js
   [2]
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only top_kept_js.mli

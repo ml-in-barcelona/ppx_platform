@@ -52,7 +52,11 @@ module Platform = struct
 end
 
 let remove_type_constraint pattern =
-  match pattern with { ppat_desc = Ppat_constraint (pattern, _); _ } -> pattern | _ -> pattern
+  match pattern with
+  | { ppat_desc = Ppat_constraint ({ ppat_desc = Ppat_unpack _; _ }, _) | Ppat_unpack _; _ } ->
+      { pattern with ppat_desc = Ppat_any }
+  | { ppat_desc = Ppat_constraint (pattern, _); _ } -> pattern
+  | _ -> pattern
 
 module Melange_only = struct
   let get_function_name pattern = match pattern with Ppat_var { txt = name; _ } -> name | _ -> "<unkwnown>"
@@ -71,6 +75,17 @@ module Melange_only = struct
     let pat = Scope.wildcard_shadowed_pattern ~shadowed:outer_refs (remove_type_constraint pat) in
     (pat, Scope.pattern_bindings pat)
 
+  let prepare_params ~outer_refs ~kept_bindings params =
+    List.fold_left_map
+      (fun kept_bindings param ->
+        match param.pparam_desc with
+        | Pparam_val (arg_label, _default, pattern) ->
+            let pattern, bindings = prepare_param_pattern ~outer_refs pattern in
+            ( Scope.String_set.union kept_bindings bindings,
+              { param with pparam_desc = Pparam_val (arg_label, None, pattern) } )
+        | Pparam_newtype _ -> (kept_bindings, param))
+      kept_bindings params
+
   let wrap_with_ignores ~loc ~kept_bindings ~outer_refs body =
     List.fold_right
       (fun name acc ->
@@ -81,29 +96,37 @@ module Melange_only = struct
       body
 
   let rec last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_name expr =
+    let raise_melange_only kept_bindings =
+      wrap_with_ignores ~loc ~kept_bindings ~outer_refs
+        [%expr Ppx_platform.fail_melange_only [%e Builder.estring ~loc original_name]]
+    in
     match expr.pexp_desc with
     | Pexp_constraint (expr, _) -> last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_name expr
-    | Pexp_function
-        ( { pparam_desc = Pparam_val (arg_label, _arg_expression, fun_pattern); _ } :: _rest,
-          _,
-          Pfunction_body expression ) ->
-        let new_fun_pattern, param_bindings = prepare_param_pattern ~outer_refs fun_pattern in
-        let kept_bindings = Scope.String_set.union kept_bindings param_bindings in
+    | Pexp_function (params, _, body) ->
+        let kept_bindings, params = prepare_params ~outer_refs ~kept_bindings params in
+        let params, body =
+          match body with
+          | Pfunction_body body ->
+              (params, last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_name body)
+          | Pfunction_cases _ ->
+              ( params @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? _]) } ],
+                raise_melange_only kept_bindings )
+        in
         let fn =
-          Builder.pexp_fun ~loc arg_label None new_fun_pattern
-            (last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_name expression)
+          match body with
+          | { pexp_desc = Pexp_function (more_params, None, body); pexp_attributes = []; _ } ->
+              Builder.pexp_function ~loc (params @ more_params) None body
+          | _ -> Builder.pexp_function ~loc params None (Pfunction_body body)
         in
         { fn with pexp_attributes = expr.pexp_attributes }
-    | _ ->
-        wrap_with_ignores ~loc ~kept_bindings ~outer_refs
-          [%expr Ppx_platform.fail_melange_only [%e Builder.estring ~loc original_name]]
+    | _ -> raise_melange_only kept_bindings
 
-  let melange_only_fun ~loc ~outer_refs arg_label pattern expression =
+  let melange_only_fun ~loc ~outer_refs params expression =
     let stringified = Ppxlib.Pprintast.string_of_expression expression in
     let message = Builder.estring ~loc stringified in
-    let new_pattern, kept_bindings = prepare_param_pattern ~outer_refs pattern in
+    let kept_bindings, params = prepare_params ~outer_refs ~kept_bindings:Scope.String_set.empty params in
     let body = wrap_with_ignores ~loc ~kept_bindings ~outer_refs [%expr Ppx_platform.fail_melange_only [%e message]] in
-    let fn = Builder.pexp_fun ~loc arg_label None new_pattern body in
+    let fn = Builder.pexp_function ~loc params None (Pfunction_body body) in
     { fn with pexp_attributes = expression.pexp_attributes }
 
   let melange_only_value_binding ~locals pattern expression =
@@ -162,43 +185,14 @@ module Melange_only = struct
     let pattern = vb.pvb_pat in
     let expression = vb.pvb_expr in
     let outer_refs = Scope.collect_free_in_expr ~outer:locals expression in
+    let rewrite_function () =
+      last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty
+        (get_function_name pattern.ppat_desc) expression
+    in
     match expression.pexp_desc with
-    | Pexp_constraint
-        ( {
-            pexp_desc =
-              Pexp_function
-                ({ pparam_desc = Pparam_val (arg_label, _arg_expression, fun_pattern); _ } :: _, _, Pfunction_body expr);
-            _;
-          },
-          type_constraint ) ->
-        let original_function_name = get_function_name pattern.ppat_desc in
-        let new_fun_pattern, kept_bindings = prepare_param_pattern ~outer_refs fun_pattern in
-        let fn =
-          Builder.pexp_fun ~loc arg_label None new_fun_pattern
-            (last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_function_name expr)
-        in
-        let item = { fn with pexp_attributes = expr.pexp_attributes } in
-        Some (make_vb_with_melange_only ~loc ~type_constraint pattern item)
-    | Pexp_function
-        ({ pparam_desc = Pparam_val (arg_label, _arg_expression, fun_pattern); _ } :: _, _, Pfunction_body expr) ->
-        let original_function_name = get_function_name pattern.ppat_desc in
-        let new_fun_pattern, kept_bindings = prepare_param_pattern ~outer_refs fun_pattern in
-        let fn =
-          Builder.pexp_fun ~loc arg_label None new_fun_pattern
-            (last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_function_name expr)
-        in
-        let item = { fn with pexp_attributes = expr.pexp_attributes } in
-        Some (make_vb_with_melange_only ~loc pattern item)
-    | Pexp_function ([], _, Pfunction_cases (_cases, _, _)) ->
-        let original_function_name = get_function_name pattern.ppat_desc in
-        let fn =
-          Builder.pexp_fun ~loc Nolabel None
-            [%pat? _]
-            (last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty
-               original_function_name expression)
-        in
-        let item = { fn with pexp_attributes = expression.pexp_attributes } in
-        Some (make_vb_with_melange_only ~loc pattern item)
+    | Pexp_constraint ({ pexp_desc = Pexp_function _; _ }, type_constraint) ->
+        Some (make_vb_with_melange_only ~loc ~type_constraint pattern (rewrite_function ()))
+    | Pexp_function _ -> Some (make_vb_with_melange_only ~loc pattern (rewrite_function ()))
     | Pexp_ident { txt = _; loc } ->
         let item = wrap_with_ignores ~loc ~kept_bindings:Scope.String_set.empty ~outer_refs [%expr Obj.magic ()] in
         Some (make_vb_with_melange_only ~loc pattern item)
@@ -265,28 +259,17 @@ module Melange_only = struct
             | Native -> (
                 match payload.pexp_desc with
                 | Pexp_constraint
-                    ( {
-                        pexp_desc =
-                          Pexp_function
-                            ( { pparam_desc = Pparam_val (arg_label, _arg_expression, pattern); _ } :: _,
-                              _,
-                              Pfunction_body expression );
-                        _;
-                      },
-                      type_constraint ) ->
+                    ({ pexp_desc = Pexp_function (params, _, Pfunction_body expression); _ }, type_constraint) ->
                     let outer_refs = Scope.collect_free_in_expr ~outer:locals payload in
-                    let fn = melange_only_fun ~loc ~outer_refs arg_label pattern expression in
+                    let fn = melange_only_fun ~loc ~outer_refs params expression in
                     Builder.pexp_constraint ~loc
                       { fn with pexp_attributes = expression.pexp_attributes }
                       type_constraint
-                | Pexp_function
-                    ({ pparam_desc = Pparam_val (arg_label, _arg_expression, pattern); _ } :: _, _, Pfunction_body inner)
-                  ->
+                | Pexp_function ({ pparam_desc = Pparam_val (_, _, pattern); _ } :: _, _, Pfunction_body _) ->
                     let outer_refs = Scope.collect_free_in_expr ~outer:locals payload in
                     let function_name = get_function_name pattern.ppat_desc in
-                    let new_fun_pattern, kept_bindings = prepare_param_pattern ~outer_refs pattern in
-                    Builder.pexp_fun ~loc arg_label None new_fun_pattern
-                      (last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings function_name inner)
+                    last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty function_name
+                      payload
                 | Pexp_let (rec_flag, value_bindings, body) ->
                     let vb_locals =
                       match rec_flag with

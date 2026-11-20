@@ -23,7 +23,7 @@ or includes never get one.
   > val use_let_unit : int -> unit
   > val use_function_cases : int -> unit [@@alert melange_only]
   > val use_constrained_fun : int -> unit
-  > val use_default_param : ?abort:int -> unit -> unit [@@alert melange_only]
+  > val use_default_param : ?abort:int -> ?base:string -> unit -> unit [@@alert melange_only]
   > val use_shadowed_default : int -> ?x:int -> unit -> unit
   > val use_melange_only_default : ?el:int -> unit -> unit [@@alert melange_only]
   > val use_enclosing_constructs : int option -> int list -> unit
@@ -133,7 +133,7 @@ Verify selected generated expansions:
 
   $ grep -A 6 "let use_shadowed_default" supported.ml
   let use_shadowed_default x =
-    let f ?x:_ =
+    let f ?x:_ () =
       let _ = x in
       Ppx_platform.fail_melange_only "f"
         [@@alert "-melange_only"]
