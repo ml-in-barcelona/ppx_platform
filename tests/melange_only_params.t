@@ -196,7 +196,7 @@ Partial application does not raise; full application raises Melange_only
   >   raises "expression full" (fun () -> Native.expression 1 2)
   > EOF
   $ ocamlc -w -5 -alert -melange_only ppx_platform.cmo native.cmo main.ml -o main.exe
-  $ ./main.exe
+  $ OCAMLRUNPARAM=b=0 ./main.exe
   two_args partial: no raise
   two_args full: raises two_args
   optional_args partial: no raise
