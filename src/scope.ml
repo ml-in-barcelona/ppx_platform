@@ -46,6 +46,8 @@ let merge outer inner =
     modules = String_map.union (fun _ _ right -> Some right) outer.modules inner.modules;
   }
 
+let open_module scope = function Struct sub -> merge scope sub | Opaque -> empty
+
 let add_value ?(melange_only = false) name scope =
   let melange_only_values =
     if melange_only then String_set.add name scope.melange_only_values

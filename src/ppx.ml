@@ -290,17 +290,12 @@ module Melange_only = struct
                   ({ item with pstr_desc = Pstr_recmodule mbs' } :: acc, ambient', exported')
               | Pstr_include inc ->
                   let mod', mod_info = self#eval_module_expr ambient inc.pincl_mod in
-                  let ambient', exported' =
-                    match mod_info with
-                    | Scope.Struct sub -> (Scope.merge ambient sub, Scope.merge exported sub)
-                    | Scope.Opaque -> (ambient, exported)
-                  in
+                  let ambient' = Scope.open_module ambient mod_info in
+                  let exported' = Scope.open_module exported mod_info in
                   ({ item with pstr_desc = Pstr_include { inc with pincl_mod = mod' } } :: acc, ambient', exported')
               | Pstr_open od ->
                   let mod', mod_info = self#eval_module_expr ambient od.popen_expr in
-                  let ambient' =
-                    match mod_info with Scope.Struct sub -> Scope.merge ambient sub | Scope.Opaque -> ambient
-                  in
+                  let ambient' = Scope.open_module ambient mod_info in
                   ({ item with pstr_desc = Pstr_open { od with popen_expr = mod' } } :: acc, ambient', exported)
               | Pstr_extension ((({ txt = "private"; _ } as ext_name), PStr inner_items), attrs) ->
                   let inner_items', inner_exported = self#eval_structure ambient inner_items in
@@ -485,7 +480,7 @@ module Melange_only = struct
             { expr with pexp_desc = Pexp_letmodule (name_opt, mod_expr', body') }
         | Pexp_open (od, body) ->
             let mod_expr', mod_info = self#eval_module_expr scope od.popen_expr in
-            let scope' = match mod_info with Scope.Struct sub -> Scope.merge scope sub | Scope.Opaque -> scope in
+            let scope' = Scope.open_module scope mod_info in
             let body' = self#expression scope' body in
             { expr with pexp_desc = Pexp_open ({ od with popen_expr = mod_expr' }, body') }
         | Pexp_object cls_str ->
@@ -522,6 +517,9 @@ module Melange_only = struct
             let vbs' = List.map (self#value_binding scope') vbs in
             let body' = self#class_expr scope' body in
             { ce with pcl_desc = Pcl_let (Recursive, vbs', body') }
+        | Pcl_open (od, body) ->
+            let mod_info = Option.value ~default:Scope.Opaque (Scope.resolve_module scope od.popen_expr.txt) in
+            { ce with pcl_desc = Pcl_open (od, self#class_expr (Scope.open_module scope mod_info) body) }
         | _ -> super#class_expr scope ce
     end
 
