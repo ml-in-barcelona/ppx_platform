@@ -50,15 +50,15 @@ Without -js flag, the compilation to native replaces the expression with a raise
 
   $ cat output.ml
   let make () =
-    let fun_value_binding_pexp_fun_2arg evt =
+    let fun_value_binding_pexp_fun_2arg evt moar_arguments =
       Ppx_platform.fail_melange_only "fun_value_binding_pexp_fun_2arg"
         [@@alert "-melange_only"]
     in
-    let perform ?abortController =
+    let perform ?abortController ?base req input =
       Ppx_platform.fail_melange_only "perform"
         [@@alert "-melange_only"]
     in
-    let fun_value_binding_labelled_args ~argument1 =
+    let fun_value_binding_labelled_args ~argument1 ~argument2 =
       Ppx_platform.fail_melange_only "fun_value_binding_labelled_args"
         [@@alert "-melange_only"]
     in

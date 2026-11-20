@@ -52,7 +52,7 @@ With -js flag everything keeps as it is and melange_only extension disappears
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun p -> Ppx_platform.fail_melange_only "let+") [@alert "-melange_only"]
+   (fun p f -> Ppx_platform.fail_melange_only "let+") [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let (pexp_ident
@@ -78,7 +78,7 @@ With -js flag everything keeps as it is and melange_only extension disappears
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun evt ->
+   (fun evt moar_arguments ->
     Ppx_platform.fail_melange_only "pexp_fun_2arg_structure_item")
     [@alert "-melange_only"]
   [@@warning "-27-32"]
@@ -88,7 +88,7 @@ With -js flag everything keeps as it is and melange_only extension disappears
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun evt ->
+   (fun evt moar_arguments ->
     Ppx_platform.fail_melange_only "pexp_fun_2arg_structure_item")
     [@alert "-melange_only"]
   [@@warning "-27-32"]
@@ -98,7 +98,7 @@ With -js flag everything keeps as it is and melange_only extension disappears
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?abortController ->
+   (fun ?abortController ?base req input ->
     Ppx_platform.fail_melange_only "perform")
     [@alert "-melange_only"]
   [@@warning "-27-32"]
