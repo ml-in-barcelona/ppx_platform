@@ -50,8 +50,8 @@ let is_open_ended = function Opaque -> true | Struct { open_ended; _ } -> open_e
 
 let open_module scope = function
   | Struct { scope = sub; open_ended = false } -> merge scope sub
-  | Struct { scope = sub; open_ended = true } -> sub
-  | Opaque -> empty
+  | Struct { scope = sub; open_ended = true } -> merge { scope with modules = String_map.empty } sub
+  | Opaque -> { scope with modules = String_map.empty }
 
 let add_value ?(melange_only = false) name scope =
   let melange_only_values =

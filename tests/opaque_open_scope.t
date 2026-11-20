@@ -96,6 +96,35 @@ the ignores emitted for discarded code must not resolve through that open.
   > let open_sig_wrapper () =
   >   let open Sig_wrapper in
   >   match%platform () with Native -> () | Melange -> ignore (extra + M.x)
+  > 
+  > let outer_values_ext_open items =
+  >   let limit = 10 in
+  >   let open Ext in
+  >   match%platform () with Native -> () | Melange -> ignore (items + limit + M.x)
+  > 
+  > let outer_values_local_open items =
+  >   let limit = 10 in
+  >   Stdlib.List.(match%platform () with Native -> () | Melange -> ignore (length items + limit))
+  > 
+  > let outer_values_let_open items =
+  >   let limit = 10 in
+  >   let open Stdlib.List in
+  >   match%platform () with Native -> () | Melange -> ignore (length items + limit)
+  > 
+  > let outer_values_melange_only items =
+  >   let limit = 10 in
+  >   let open Stdlib.List in
+  >   let%melange_only g () = length items + limit in
+  >   ignore g
+  > 
+  > module List = struct
+  >   include Stdlib.List
+  >   let second l = nth l 1
+  > end
+  > 
+  > let outer_values_open_ended items =
+  >   let limit = 10 in
+  >   List.(match%platform () with Native -> () | Melange -> ignore (second items + limit))
   > EOF
 
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl > native/input.ml
@@ -214,7 +243,53 @@ the ignores emitted for discarded code must not resolve through that open.
     let open Sig_wrapper in
     let _ = extra in
     ()
-  $ ocamlc -c -w +A-33-44-45-70 -alert @melange_only -I native native/input.ml
+  
+  let outer_values_ext_open items =
+    let limit = 10 in
+    let open Ext in
+    let _ = items in
+    let _ = limit in
+    ()
+  
+  let outer_values_local_open items =
+    let limit = 10 in
+    let open Stdlib.List in
+    let _ = items in
+    let _ = limit in
+    ()
+  
+  let outer_values_let_open items =
+    let limit = 10 in
+    let open Stdlib.List in
+    let _ = items in
+    let _ = limit in
+    ()
+  
+  let outer_values_melange_only items =
+    let limit = 10 in
+    let open Stdlib.List in
+    let g () =
+      let _ = items in
+      let _ = limit in
+      Ppx_platform.fail_melange_only "g"
+        [@@alert "-melange_only"]
+    in
+    ignore g
+  
+  module List = struct
+    include Stdlib.List
+  
+    let second l = nth l 1
+  end
+  
+  let outer_values_open_ended items =
+    let limit = 10 in
+    let open List in
+    let _ = items in
+    let _ = limit in
+    let _ = second in
+    ()
+  $ ocamlc -c -w +A-33-44-45-70 -warn-error +A -alert @melange_only -I native native/input.ml
 
   $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl > js/input.ml
   $ ocamlc -c -w +A-44-45-70 -alert -melange_only -I js js/input.ml
