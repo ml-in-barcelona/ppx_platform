@@ -151,7 +151,7 @@ let%melange_only and [%melange_only ...]
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?a -> Ppx_platform.fail_melange_only "g") [@alert "-melange_only"]
+   (fun ?a b -> Ppx_platform.fail_melange_only "g") [@alert "-melange_only"]
   [@@warning "-27-32"]
   
   let (h
@@ -175,7 +175,7 @@ let%melange_only and [%melange_only ...]
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun p -> Ppx_platform.fail_melange_only "let+") [@alert "-melange_only"]
+   (fun p f -> Ppx_platform.fail_melange_only "let+") [@alert "-melange_only"]
   [@@warning "-27-32"]
 
 A floating attribute at the start of a file drops the whole file

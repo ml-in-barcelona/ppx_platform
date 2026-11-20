@@ -56,21 +56,12 @@
     let discard = value => Ppx_platform.fail_melange_only("discard");
     ();
   };
-  let reifyStyle = (type a, x: 'a): (style(a), a) => {
-    let isCanvasGradient = _ => false;
-    let isCanvasPattern = _ => false;
-    (
-      if (Js.typeof(x) == "string") {
-        Obj.magic(String);
-      } else if (isCanvasGradient(x)) {
-        Obj.magic(Gradient);
-      } else if (isCanvasPattern(x)) {
-        Obj.magic(Pattern);
-      } else {
-        invalid_arg(
-          "Unknown canvas style kind. Known values are: String, CanvasGradient, CanvasPattern",
-        );
-      },
-      Obj.magic(x),
-    );
-  };
+  [@warning "-27-32"]
+  let [@alert
+        melange_only(
+          "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.",
+        )
+      ]
+      reifyStyle =
+    [@alert "-melange_only"]
+    ((type a, x) => Ppx_platform.fail_melange_only("reifyStyle"));
