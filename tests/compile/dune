@@ -13,6 +13,18 @@
 (rule
  (copy sample.ml sample_js.ml))
 
+(rule
+ (copy dom.ml dom_native.ml))
+
+(rule
+ (copy dom.mli dom_native.mli))
+
+(rule
+ (copy dom.ml dom_js.ml))
+
+(rule
+ (copy dom.mli dom_js.mli))
+
 (library
  (name sample_js)
  (modes melange)
@@ -20,16 +32,29 @@
  (preprocess
   (pps ppx_platform -- -js)))
 
+(library
+ (name dom_native)
+ (modules dom_native)
+ (preprocess
+  (pps ppx_platform)))
+
+(library
+ (name dom_js)
+ (modes melange)
+ (modules dom_js)
+ (preprocess
+  (pps ppx_platform melange.ppx -- -js)))
+
 (melange.emit
  (target out)
  (modules)
- (libraries sample_js)
+ (libraries sample_js dom_js)
  (module_systems commonjs))
 
 (executable
  (name check)
  (modules check)
- (libraries sample_native ppx_platform.runtime))
+ (libraries sample_native dom_native ppx_platform.runtime))
 
 (rule
  (alias runtest)

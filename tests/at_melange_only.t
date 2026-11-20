@@ -142,8 +142,52 @@ Pstr_primitive
   external add : int -> int -> int = "caml_add_int" [@@melange_only]
 
   $ ./standalone.exe -impl input_primitive.ml | ocamlformat - --enable-outside-detected-project --impl
+  let add : int -> int -> int = fun _ _ -> Ppx_platform.fail_melange_only "add"
+  [@@warning "-32"]
 
+  $ cp $INSIDE_DUNE/src/runtime/ppx_platform.ml . && ocamlc -c ppx_platform.ml
   $ ./standalone.exe -impl input_primitive.ml > input_primitive_server.ml && ocamlc -c input_primitive_server.ml
+
+In the native build, an external with an arrow type becomes a function that raises Ppx_platform.Melange_only. It keeps
+the labels, so it matches an interface. An external without an arrow type is removed.
+
+  $ cat > input_external.ml << EOF
+  > type node
+  > external owner_document : node -> node = "ownerDocument" [@@mel.get] [@@melange_only]
+  > external set_attribute : node -> name:string -> ?ns:string -> string -> unit = "setAttribute" [@@mel.send] [@@melange_only]
+  > external document : node = "document" [@@mel.module "dom"] [@@melange_only]
+  > EOF
+
+  $ cat > input_external_server.mli << EOF
+  > type node
+  > val owner_document : node -> node
+  > val set_attribute : node -> name:string -> ?ns:string -> string -> unit
+  > EOF
+
+  $ ./standalone.exe -impl input_external.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  type node
+  
+  external owner_document : node -> node = "ownerDocument"
+  [@@mel.get] [@@melange_only]
+  
+  external set_attribute : node -> name:string -> ?ns:string -> string -> unit
+    = "setAttribute"
+  [@@mel.send] [@@melange_only]
+  
+  external document : node = "document" [@@mel.module "dom"] [@@melange_only]
+
+  $ ./standalone.exe -impl input_external.ml | ocamlformat - --enable-outside-detected-project --impl
+  type node
+  
+  let owner_document : node -> node =
+   fun _ -> Ppx_platform.fail_melange_only "owner_document"
+  [@@warning "-32"]
+  
+  let set_attribute : node -> name:string -> ?ns:string -> string -> unit =
+   fun _ ~name:_ ?ns:_ _ -> Ppx_platform.fail_melange_only "set_attribute"
+  [@@warning "-32"]
+
+  $ ./standalone.exe -impl input_external.ml > input_external_server.ml && ocamlc -c input_external_server.mli input_external_server.ml
 
 Pstr_eval
 

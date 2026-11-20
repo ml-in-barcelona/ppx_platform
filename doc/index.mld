@@ -50,6 +50,12 @@ let main = id =>
 
 [main] returns [0] on native, because [countDomNodes] raises. The call in [main] still triggers the [melange_only] alert. Silence it on the identifier with [[@alert "-melange_only"]].
 
+With a function type as annotation, the native build defines the value from the type, whatever the body is. So a [[%mel.raw]] value works too, and the value keeps its type and labels to match an interface:
+
+{[
+let%melange_only setTitle: string => unit = [%mel.raw "function (t) { document.title = t }"];
+]}
+
 [[%melange_only fun ...]] does the same for a single function expression:
 
 {[
@@ -111,6 +117,13 @@ module X = {
 module X = {
   type t = Yojson.Basic.t;
 };
+]}
+
+On an [external] with a function type, the native build defines a function of that type that raises [Ppx_platform.Melange_only], so the external can stand behind an interface. It keeps the labels and gets no alert. The native build removes an external of any other type:
+
+{[
+[@mel.send] [@melange_only]
+external setAttribute: (Dom.element, string, string) => unit = "setAttribute";
 ]}
 
 {1 Libraries}
