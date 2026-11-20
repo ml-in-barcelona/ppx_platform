@@ -314,3 +314,53 @@ Verify selected generated expansions:
   43 |   let unused_a, set_a = use_state 4 in
              ^^^^^^^^
   Warning 27 [unused-var-strict]: unused variable unused_a.
+
+Bindings wrapped in `[%%private ...]` (Melange private items) are visible inside the enclosing structure,
+but not exported through a module boundary:
+
+  $ cat > private_input.ml << 'EOF'
+  > [%%private let secret = "k"]
+  > [%%private let%melange_only private_helper () = secret]
+  > 
+  > module M = struct
+  >   [%%private let hidden = 1]
+  >   let visible = 2
+  > end
+  > 
+  > let use_priv =
+  >   [%melange_only fun () -> ignore (secret, private_helper (), M.visible)]
+  > 
+  > let use_hidden_mod =
+  >   [%melange_only fun () -> ignore M.hidden]
+  > EOF
+
+  $ ./standalone.exe -impl private_input.ml | ocamlformat - --enable-outside-detected-project --impl
+  [%%private let secret = "k"]
+  
+  [%%private
+  let (private_helper
+       [@alert
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) =
+   (fun () ->
+    let _ = secret in
+    Ppx_platform.fail_melange_only "private_helper")
+    [@alert "-melange_only"]
+  [@@warning "-32"]]
+  
+  module M = struct
+    [%%private let hidden = 1]
+  
+    let visible = 2
+  end
+  
+  let use_priv () =
+    let _ = private_helper [@@alert "-melange_only"] in
+    let _ = secret in
+    let _ = M.visible in
+    Ppx_platform.fail_melange_only "<unkwnown>"
+  
+  let use_hidden_mod () =
+    let module _ = M in
+    Ppx_platform.fail_melange_only "<unkwnown>"

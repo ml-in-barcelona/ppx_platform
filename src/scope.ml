@@ -55,11 +55,35 @@ let add_value ?(melange_only = false) name scope =
 
 let add_module name info scope = { scope with modules = String_map.add name info scope.modules }
 
+let has_melange_only_alert attrs =
+  List.exists
+    (fun attr ->
+      String.equal attr.attr_name.txt "alert"
+      &&
+      match attr.attr_payload with
+      | PStr
+          [
+            {
+              pstr_desc =
+                Pstr_eval
+                  ( ( { pexp_desc = Pexp_ident { txt = Lident "melange_only"; _ }; _ }
+                    | {
+                        pexp_desc = Pexp_apply ({ pexp_desc = Pexp_ident { txt = Lident "melange_only"; _ }; _ }, _);
+                        _;
+                      } ),
+                    _ );
+              _;
+            };
+          ] ->
+          true
+      | _ -> false)
+    attrs
+
 let rec of_signature items =
   List.fold_left
     (fun acc item ->
       match item.psig_desc with
-      | Psig_value vd -> add_value vd.pval_name.txt acc
+      | Psig_value vd -> add_value ~melange_only:(has_melange_only_alert vd.pval_attributes) vd.pval_name.txt acc
       | Psig_module { pmd_name = { txt = Some name; _ }; pmd_type; _ } -> add_module name (of_module_type pmd_type) acc
       | Psig_recmodule mds ->
           List.fold_left
@@ -226,7 +250,8 @@ let rec local_bindings_of_structure_item item =
           | Some name -> { acc with bound_modules = String_set.add name acc.bound_modules }
           | None -> acc)
         empty_bindings mbs
-  | Pstr_include { pincl_mod = { pmod_desc = Pmod_structure items; _ }; _ } ->
+  | Pstr_include { pincl_mod = { pmod_desc = Pmod_structure items; _ }; _ }
+  | Pstr_extension (({ txt = "private"; _ }, PStr items), _) ->
       List.fold_left (fun acc i -> merge_bindings acc (local_bindings_of_structure_item i)) empty_bindings items
   | _ -> empty_bindings
 
@@ -504,6 +529,23 @@ let rec wildcard_shadowed_pattern ~shadowed_values ~shadowed_modules pat =
   | Ppat_variant (_, None)
   | Ppat_type _ | Ppat_extension _ ->
       pat
+
+let modules_used_by_values values =
+  Longident_set.fold
+    (fun lid acc ->
+      match lid with
+      | Ldot (mod_lid, _) -> (
+          match root_module_of_longident mod_lid with Some root -> String_set.add root acc | None -> acc)
+      | Lident _ | Lapply _ -> acc)
+    values String_set.empty
+
+let diff_refs ~discarded ~kept =
+  let kept_modules = String_set.union kept.ref_modules (modules_used_by_values kept.ref_values) in
+  {
+    ref_values = Longident_set.diff discarded.ref_values kept.ref_values;
+    ref_melange_only_values = Longident_set.diff discarded.ref_melange_only_values kept.ref_values;
+    ref_modules = String_set.diff discarded.ref_modules kept_modules;
+  }
 
 let shadowed_sets refs =
   let shadowed_values =

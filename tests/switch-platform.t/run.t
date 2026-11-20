@@ -7,7 +7,10 @@ With -js flag the Melange case is kept
   
   let value = doMelangeLogic ()
   let universal_fn () = doMelangeLogic ()
-  let universal_fn_with_arg1 arg1 = doMelangeLogic ()
+  
+  let universal_fn_with_arg1 arg1 =
+    let _ = arg1 in
+    doMelangeLogic ()
 
 Without -js flag, the compilation to native keeps the Native case.
 

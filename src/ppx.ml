@@ -16,8 +16,6 @@ let removed_message ~removed ~replacement =
   Printf.sprintf "[ppx_platform] %s was removed in 0.3.0, use %s" removed replacement
 
 module Platform = struct
-  let pattern = Ast_pattern.(__')
-
   let case_name case =
     match case.pc_lhs.ppat_desc with
     | Ppat_construct ({ txt = Lident name | Ldot (Lident "Runtime", (("Server" | "Client") as name)); _ }, _) ->
@@ -44,26 +42,13 @@ module Platform = struct
   let switch_platform_requires_a_match ~loc =
     [%expr [%ocaml.error "[ppx_platform] switch%platform requires a match expression"]]
 
-  let handler ~ctxt:_ { txt = payload; loc } =
+  let extract ~loc payload =
     match payload with
     | PStr [ { pstr_desc = Pstr_eval (expression, _); _ } ] -> (
         match expression.pexp_desc with
-        | Pexp_match (_expression, cases) -> (
-            match cases with
-            | [ first; second ] -> (
-                match collect_expressions ~loc first second with
-                | Ok (server_expr, client_expr) -> (
-                    match !mode with
-                    (* When it's -js keep the client_expr *)
-                    | Js -> client_expr
-                    (* When it's isn't -js keep the server_expr *)
-                    | Native -> server_expr)
-                | Error error_msg_expr -> error_msg_expr)
-            | _ -> switch_platform_requires_a_match ~loc)
-        | _ -> switch_platform_requires_a_match ~loc)
-    | _ -> switch_platform_requires_a_match ~loc
-
-  let rule = Context_free.Rule.extension (Extension.V3.declare "platform" Extension.Context.expression pattern handler)
+        | Pexp_match (_expression, [ first; second ]) -> collect_expressions ~loc first second
+        | _ -> Error (switch_platform_requires_a_match ~loc))
+    | _ -> Error (switch_platform_requires_a_match ~loc)
 end
 
 let remove_type_constraint pattern =
@@ -89,17 +74,7 @@ module Melange_only = struct
     (pat, Scope.pattern_bindings pat)
 
   let wrap_with_ignores ~loc ~suppress_alert ~kept_bindings ~outer_refs body =
-    let modules_used_by_values =
-      Scope.Longident_set.fold
-        (fun lid acc ->
-          match lid with
-          | Ldot (mod_lid, _) -> (
-              match Scope.root_module_of_longident mod_lid with
-              | Some root -> Scope.String_set.add root acc
-              | None -> acc)
-          | Lident _ | Lapply _ -> acc)
-        outer_refs.Scope.ref_values Scope.String_set.empty
-    in
+    let modules_used_by_values = Scope.modules_used_by_values outer_refs.Scope.ref_values in
     let outer_modules_only = Scope.String_set.diff outer_refs.ref_modules modules_used_by_values in
     let all_modules = Scope.String_set.union kept_bindings.Scope.bound_modules outer_modules_only in
     let all_values =
@@ -327,6 +302,12 @@ module Melange_only = struct
                     match mod_info with Scope.Struct sub -> Scope.merge ambient sub | Scope.Opaque -> ambient
                   in
                   ({ item with pstr_desc = Pstr_open { od with popen_expr = mod' } } :: acc, ambient', exported)
+              | Pstr_extension ((({ txt = "private"; _ } as ext_name), PStr inner_items), attrs) ->
+                  let inner_items', inner_exported = self#eval_structure ambient inner_items in
+                  let ambient' = Scope.merge ambient inner_exported in
+                  ( { item with pstr_desc = Pstr_extension ((ext_name, PStr inner_items'), attrs) } :: acc,
+                    ambient',
+                    exported )
               | Pstr_extension (({ txt; _ }, PStr [ { pstr_desc = Pstr_value (rec_flag, vbs); _ } ]), _)
                 when String.equal txt melange_only -> (
                   let loc = item.pstr_loc in
@@ -397,6 +378,22 @@ module Melange_only = struct
 
       method! expression scope expr =
         match expr.pexp_desc with
+        | Pexp_extension ({ txt = "platform"; _ }, payload) -> (
+            let loc = expr.pexp_loc in
+            match Platform.extract ~loc payload with
+            | Ok (server_expr, client_expr) ->
+                let kept_expr, discarded_expr =
+                  match !mode with Js -> (client_expr, server_expr) | Native -> (server_expr, client_expr)
+                in
+                let kept_expr' = self#expression scope kept_expr in
+                let discarded_refs = Scope.collect_free_in_expr ~outer:scope discarded_expr in
+                let kept_refs = Scope.collect_free_in_expr ~outer:scope kept_expr' in
+                let outer_refs = Scope.diff_refs ~discarded:discarded_refs ~kept:kept_refs in
+                let result =
+                  wrap_with_ignores ~loc ~suppress_alert:true ~kept_bindings:Scope.empty_bindings ~outer_refs kept_expr'
+                in
+                { result with pexp_attributes = result.pexp_attributes @ expr.pexp_attributes }
+            | Error error_msg_expr -> error_msg_expr)
         | Pexp_extension ({ txt; _ }, PStr [ { pstr_desc = Pstr_eval (payload, []); _ } ])
           when String.equal txt melange_only -> (
             let loc = expr.pexp_loc in
@@ -694,6 +691,46 @@ module Preprocess = struct
                       ] );
             }
         | Native, Pexp_extension ({ txt; _ }, _) when String.equal txt melange_only -> expr
+        | _, Pexp_extension (({ txt = "platform"; _ } as ext_name), payload) -> (
+            if should_keep expr.pexp_attributes = `drop then expression_error ~loc:expr.pexp_loc expr.pexp_attributes
+            else
+              match payload with
+              | PStr
+                  [
+                    ({
+                       pstr_desc =
+                         Pstr_eval
+                           (({ pexp_desc = Pexp_match (scrutinee, [ first; second ]); _ } as match_expr), eval_attrs);
+                       _;
+                     } as str_item);
+                  ] ->
+                  let cases' =
+                    match (Platform.case_name first, Platform.case_name second) with
+                    | Some "Native", Some "Melange" -> (
+                        match !mode with
+                        | Native -> [ { first with pc_rhs = self#expression first.pc_rhs }; second ]
+                        | Js -> [ first; { second with pc_rhs = self#expression second.pc_rhs } ])
+                    | Some "Melange", Some "Native" -> (
+                        match !mode with
+                        | Native -> [ first; { second with pc_rhs = self#expression second.pc_rhs } ]
+                        | Js -> [ { first with pc_rhs = self#expression first.pc_rhs }; second ])
+                    | _ -> [ first; second ]
+                  in
+                  {
+                    expr with
+                    pexp_desc =
+                      Pexp_extension
+                        ( ext_name,
+                          PStr
+                            [
+                              {
+                                str_item with
+                                pstr_desc =
+                                  Pstr_eval ({ match_expr with pexp_desc = Pexp_match (scrutinee, cases') }, eval_attrs);
+                              };
+                            ] );
+                  }
+              | _ -> expr)
         | _, Pexp_open (od, body)
           when should_keep expr.pexp_attributes = `drop || should_keep od.popen_attributes = `drop ->
             self#expression body
@@ -760,12 +797,12 @@ end
 
 let () =
   Driver.add_arg "-js" (Unit (fun () -> mode := Js)) ~doc:"preprocess for js build";
-  let rules = Platform.rule :: Removed.rules in
-  Driver.V2.register_transformation "ppx_platform" ~rules
-    ~impl:(fun _ structure ->
-      Removed.reject#structure structure;
-      let structure = Preprocess.traverse#structure structure in
-      Melange_only.traverse structure)
-    ~intf:(fun _ signature ->
+  let instrument =
+    Driver.Instrument.V2.make ~position:Before (fun _ structure ->
+        Removed.reject#structure structure;
+        let structure = Preprocess.traverse#structure structure in
+        Melange_only.traverse structure)
+  in
+  Driver.V2.register_transformation "ppx_platform" ~rules:Removed.rules ~instrument ~intf:(fun _ signature ->
       Removed.reject#signature signature;
       Preprocess.traverse#signature signature)
