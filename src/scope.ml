@@ -20,7 +20,7 @@ module Longident_set = Set.Make (struct
     | Lapply _, (Lident _ | Ldot _) -> 1
 end)
 
-type module_info = Opaque | Struct of t
+type module_info = Opaque | Struct of { scope : t; open_ended : bool }
 and t = { values : String_set.t; melange_only_values : String_set.t; modules : module_info String_map.t }
 
 type bindings = { bound_values : String_set.t; bound_modules : String_set.t }
@@ -46,7 +46,12 @@ let merge outer inner =
     modules = String_map.union (fun _ _ right -> Some right) outer.modules inner.modules;
   }
 
-let open_module scope = function Struct sub -> merge scope sub | Opaque -> empty
+let is_open_ended = function Opaque -> true | Struct { open_ended; _ } -> open_ended
+
+let open_module scope = function
+  | Struct { scope = sub; open_ended = false } -> merge scope sub
+  | Struct { scope = sub; open_ended = true } -> sub
+  | Opaque -> empty
 
 let add_value ?(melange_only = false) name scope =
   let melange_only_values =
@@ -83,20 +88,32 @@ let has_melange_only_alert attrs =
 
 let rec of_signature items =
   List.fold_left
-    (fun acc item ->
+    (fun (acc, open_ended) item ->
       match item.psig_desc with
-      | Psig_value vd -> add_value ~melange_only:(has_melange_only_alert vd.pval_attributes) vd.pval_name.txt acc
-      | Psig_module { pmd_name = { txt = Some name; _ }; pmd_type; _ } -> add_module name (of_module_type pmd_type) acc
+      | Psig_value vd ->
+          (add_value ~melange_only:(has_melange_only_alert vd.pval_attributes) vd.pval_name.txt acc, open_ended)
+      | Psig_module { pmd_name = { txt = Some name; _ }; pmd_type; _ } ->
+          (add_module name (of_module_type pmd_type) acc, open_ended)
       | Psig_recmodule mds ->
-          List.fold_left
-            (fun s md -> match md.pmd_name.txt with Some name -> add_module name Opaque s | None -> s)
-            acc mds
+          let acc =
+            List.fold_left
+              (fun s md -> match md.pmd_name.txt with Some name -> add_module name Opaque s | None -> s)
+              acc mds
+          in
+          (acc, open_ended)
       | Psig_include { pincl_mod; _ } -> (
-          match of_module_type pincl_mod with Struct sub -> merge acc sub | Opaque -> acc)
-      | _ -> acc)
-    empty items
+          match of_module_type pincl_mod with
+          | Struct { scope = sub; open_ended = sub_open } -> (merge acc sub, open_ended || sub_open)
+          | Opaque -> (acc, true))
+      | _ -> (acc, open_ended))
+    (empty, false) items
 
-and of_module_type mty = match mty.pmty_desc with Pmty_signature items -> Struct (of_signature items) | _ -> Opaque
+and of_module_type mty =
+  match mty.pmty_desc with
+  | Pmty_signature items ->
+      let scope, open_ended = of_signature items in
+      Struct { scope; open_ended }
+  | _ -> Opaque
 
 let rec collect_pattern_bindings acc pat =
   match pat.ppat_desc with
@@ -142,7 +159,7 @@ let rec resolve_module scope = function
   | Lident name -> String_map.find_opt name scope.modules
   | Ldot (parent, name) -> (
       match resolve_module scope parent with
-      | Some (Struct sub) -> String_map.find_opt name sub.modules
+      | Some (Struct { scope = sub; _ }) -> String_map.find_opt name sub.modules
       | Some Opaque | None -> None)
   | Lapply _ -> None
 
@@ -152,7 +169,7 @@ let resolve_value scope = function
       else `Not_found
   | Ldot (mod_lid, name) as full_lid -> (
       match resolve_module scope mod_lid with
-      | Some (Struct sub) when String_set.mem name sub.values ->
+      | Some (Struct { scope = sub; _ }) when String_set.mem name sub.values ->
           `Value (full_lid, String_set.mem name sub.melange_only_values)
       | _ -> (
           match root_module_of_longident mod_lid with
@@ -194,7 +211,7 @@ let rec find_in_opens_dot mod_lid name = function
   | [] -> None
   | (prefix, sub) :: rest -> (
       match resolve_module sub mod_lid with
-      | Some (Struct nested) when String_set.mem name nested.values ->
+      | Some (Struct { scope = nested; _ }) when String_set.mem name nested.values ->
           Some (`Value (Ldot (qualify_longident prefix mod_lid, name), String_set.mem name nested.melange_only_values))
       | _ -> (
           match root_module_of_longident mod_lid with
@@ -381,7 +398,7 @@ let collect_free_in_expr ~outer expr =
                   | Some root when String_set.mem root locals.local_modules -> locals
                   | _ -> (
                       match resolve_module outer lid with
-                      | Some (Struct sub) ->
+                      | Some (Struct { scope = sub; _ }) ->
                           {
                             local_values = String_set.diff locals.local_values sub.values;
                             local_modules =

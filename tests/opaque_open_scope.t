@@ -56,6 +56,46 @@ the ignores emitted for discarded code must not resolve through that open.
   >   let f () = match%platform () with Native -> () | Melange -> ignore M.x
   >   let%melange_only g () = M.x
   > end
+  > 
+  > module Wrapper = struct
+  >   include Ext
+  >   let after_inc = 10
+  > end
+  > 
+  > let open_wrapper () =
+  >   let open Wrapper in
+  >   match%platform () with Native -> () | Melange -> ignore (after_inc + M.x)
+  > 
+  > let use_wrapper_member () =
+  >   match%platform () with Native -> () | Melange -> ignore Wrapper.after_inc
+  > 
+  > module Wrapper2 = struct
+  >   include Wrapper
+  >   let more = 20
+  > end
+  > 
+  > let open_wrapper2 () =
+  >   let open Wrapper2 in
+  >   match%platform () with Native -> () | Melange -> ignore (after_inc + more + M.x)
+  > 
+  > let open_inline_struct_include () =
+  >   let open struct
+  >     include Ext
+  >     let k = 1
+  >   end in
+  >   match%platform () with Native -> () | Melange -> ignore (k + M.x)
+  > 
+  > module Sig_wrapper : sig
+  >   include module type of Ext
+  >   val extra : int
+  > end = struct
+  >   include Ext
+  >   let extra = 30
+  > end
+  > 
+  > let open_sig_wrapper () =
+  >   let open Sig_wrapper in
+  >   match%platform () with Native -> () | Melange -> ignore (extra + M.x)
   > EOF
 
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl > native/input.ml
@@ -123,6 +163,57 @@ the ignores emitted for discarded code must not resolve through that open.
      (fun () -> Ppx_platform.fail_melange_only "g") [@alert "-melange_only"]
     [@@warning "-32"]
   end
+  
+  module Wrapper = struct
+    include Ext
+  
+    let after_inc = 10
+  end
+  
+  let open_wrapper () =
+    let open Wrapper in
+    let _ = after_inc in
+    ()
+  
+  let use_wrapper_member () =
+    let _ = Wrapper.after_inc in
+    ()
+  
+  module Wrapper2 = struct
+    include Wrapper
+  
+    let more = 20
+  end
+  
+  let open_wrapper2 () =
+    let open Wrapper2 in
+    let _ = after_inc in
+    let _ = more in
+    ()
+  
+  let open_inline_struct_include () =
+    let open struct
+      include Ext
+  
+      let k = 1
+    end in
+    let _ = k in
+    ()
+  
+  module Sig_wrapper : sig
+    include module type of Ext
+  
+    val extra : int
+  end = struct
+    include Ext
+  
+    let extra = 30
+  end
+  
+  let open_sig_wrapper () =
+    let open Sig_wrapper in
+    let _ = extra in
+    ()
   $ ocamlc -c -w +A-33-44-45-70 -alert @melange_only -I native native/input.ml
 
   $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl > js/input.ml

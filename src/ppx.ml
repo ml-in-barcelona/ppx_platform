@@ -249,25 +249,25 @@ module Melange_only = struct
       inherit [Scope.t] Ast_traverse.map_with_context as super
 
       method private eval_structure outer items =
-        let rev_items, _, exported =
+        let rev_items, _, exported, open_ended =
           List.fold_left
-            (fun (acc, ambient, exported) item ->
+            (fun (acc, ambient, exported, open_ended) item ->
               match item.pstr_desc with
               | Pstr_value (Nonrecursive, vbs) ->
                   let vbs' = List.map (self#value_binding ambient) vbs in
                   let ambient' = Scope.add_value_bindings vbs ambient in
                   let exported' = Scope.add_value_bindings vbs exported in
-                  ({ item with pstr_desc = Pstr_value (Nonrecursive, vbs') } :: acc, ambient', exported')
+                  ({ item with pstr_desc = Pstr_value (Nonrecursive, vbs') } :: acc, ambient', exported', open_ended)
               | Pstr_value (Recursive, vbs) ->
                   let ambient' = Scope.add_value_bindings vbs ambient in
                   let exported' = Scope.add_value_bindings vbs exported in
                   let vbs' = List.map (self#value_binding ambient') vbs in
-                  ({ item with pstr_desc = Pstr_value (Recursive, vbs') } :: acc, ambient', exported')
+                  ({ item with pstr_desc = Pstr_value (Recursive, vbs') } :: acc, ambient', exported', open_ended)
               | Pstr_primitive vd ->
                   let vd' = self#value_description ambient vd in
                   let ambient' = Scope.add_value vd.pval_name.txt ambient in
                   let exported' = Scope.add_value vd.pval_name.txt exported in
-                  ({ item with pstr_desc = Pstr_primitive vd' } :: acc, ambient', exported')
+                  ({ item with pstr_desc = Pstr_primitive vd' } :: acc, ambient', exported', open_ended)
               | Pstr_module mb ->
                   let expr', mod_info = self#eval_module_expr ambient mb.pmb_expr in
                   let mb' = { mb with pmb_expr = expr' } in
@@ -276,7 +276,7 @@ module Melange_only = struct
                     | Some name -> (Scope.add_module name mod_info ambient, Scope.add_module name mod_info exported)
                     | None -> (ambient, exported)
                   in
-                  ({ item with pstr_desc = Pstr_module mb' } :: acc, ambient', exported')
+                  ({ item with pstr_desc = Pstr_module mb' } :: acc, ambient', exported', open_ended)
               | Pstr_recmodule mbs ->
                   let add_rec_mods scope =
                     List.fold_left
@@ -287,22 +287,30 @@ module Melange_only = struct
                   let ambient' = add_rec_mods ambient in
                   let exported' = add_rec_mods exported in
                   let mbs' = List.map (self#module_binding ambient') mbs in
-                  ({ item with pstr_desc = Pstr_recmodule mbs' } :: acc, ambient', exported')
+                  ({ item with pstr_desc = Pstr_recmodule mbs' } :: acc, ambient', exported', open_ended)
               | Pstr_include inc ->
                   let mod', mod_info = self#eval_module_expr ambient inc.pincl_mod in
                   let ambient' = Scope.open_module ambient mod_info in
                   let exported' = Scope.open_module exported mod_info in
-                  ({ item with pstr_desc = Pstr_include { inc with pincl_mod = mod' } } :: acc, ambient', exported')
+                  let open_ended' = open_ended || Scope.is_open_ended mod_info in
+                  ( { item with pstr_desc = Pstr_include { inc with pincl_mod = mod' } } :: acc,
+                    ambient',
+                    exported',
+                    open_ended' )
               | Pstr_open od ->
                   let mod', mod_info = self#eval_module_expr ambient od.popen_expr in
                   let ambient' = Scope.open_module ambient mod_info in
-                  ({ item with pstr_desc = Pstr_open { od with popen_expr = mod' } } :: acc, ambient', exported)
+                  ( { item with pstr_desc = Pstr_open { od with popen_expr = mod' } } :: acc,
+                    ambient',
+                    exported,
+                    open_ended )
               | Pstr_extension ((({ txt = "private"; _ } as ext_name), PStr inner_items), attrs) ->
-                  let inner_items', inner_exported = self#eval_structure ambient inner_items in
-                  let ambient' = Scope.merge ambient inner_exported in
+                  let inner_items', inner_info = self#eval_structure ambient inner_items in
+                  let ambient' = Scope.open_module ambient inner_info in
                   ( { item with pstr_desc = Pstr_extension ((ext_name, PStr inner_items'), attrs) } :: acc,
                     ambient',
-                    exported )
+                    exported,
+                    open_ended )
               | Pstr_extension (({ txt; _ }, PStr [ { pstr_desc = Pstr_value (rec_flag, vbs); _ } ]), _)
                 when String.equal txt melange_only -> (
                   let loc = item.pstr_loc in
@@ -313,12 +321,12 @@ module Melange_only = struct
                           let ambient' = Scope.add_value_bindings vbs ambient in
                           let exported' = Scope.add_value_bindings vbs exported in
                           let vbs' = List.map (self#value_binding ambient') vbs in
-                          (Builder.pstr_value ~loc Recursive vbs' :: acc, ambient', exported')
+                          (Builder.pstr_value ~loc Recursive vbs' :: acc, ambient', exported', open_ended)
                       | Nonrecursive ->
                           let vbs' = List.map (self#value_binding ambient) vbs in
                           let ambient' = Scope.add_value_bindings vbs ambient in
                           let exported' = Scope.add_value_bindings vbs exported in
-                          (Builder.pstr_value ~loc Nonrecursive vbs' :: acc, ambient', exported'))
+                          (Builder.pstr_value ~loc Nonrecursive vbs' :: acc, ambient', exported', open_ended))
                   | Native ->
                       let vb_scope =
                         match rec_flag with
@@ -342,19 +350,19 @@ module Melange_only = struct
                           (ambient, exported)
                           (List.map2 (fun (is_mel, _) vb -> (is_mel, vb)) results vbs)
                       in
-                      (Builder.pstr_value ~loc rec_flag vbs' :: acc, ambient', exported'))
+                      (Builder.pstr_value ~loc rec_flag vbs' :: acc, ambient', exported', open_ended))
               | _ ->
                   let item' = self#structure_item ambient item in
-                  (item' :: acc, ambient, exported))
-            ([], outer, Scope.empty) items
+                  (item' :: acc, ambient, exported, open_ended))
+            ([], outer, Scope.empty, false) items
         in
-        (List.rev rev_items, exported)
+        (List.rev rev_items, Scope.Struct { scope = exported; open_ended })
 
       method private eval_module_expr scope me =
         match me.pmod_desc with
         | Pmod_structure items ->
-            let items', exported = self#eval_structure scope items in
-            ({ me with pmod_desc = Pmod_structure items' }, Scope.Struct exported)
+            let items', mod_info = self#eval_structure scope items in
+            ({ me with pmod_desc = Pmod_structure items' }, mod_info)
         | Pmod_ident { txt = lid; _ } ->
             let info = match Scope.resolve_module scope lid with Some info -> info | None -> Scope.Opaque in
             (me, info)
