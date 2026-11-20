@@ -96,8 +96,8 @@ External shared helper module (compiled separately, so ppx_platform has no .cmi 
   > 
   > let%melange_only use_functor_include () = from_functor_include ()
   > 
-  > (* 8. Local module constrained by a named external signature: let module _ = M silences W60 on M,
-  >    while hidden internal values inside M still warn W32 *)
+  > (* 8. Local module constrained by a named external signature -> Warning 60 (unused module) on M,
+  >    and hidden internal values inside M still warn W32 *)
   > module Named_sig_mod : Ext_helpers.S = struct
   >   let from_named_sig () = ()
   >   let priv = 2
@@ -153,24 +153,31 @@ External shared helper module (compiled separately, so ppx_platform has no .cmi 
              ^^^^
   Warning 32 [unused-value-declaration]: unused value priv.
   
-  File "unsupported.ml", line 104, characters 0-22:
-  104 | type client_type = int
+  File "unsupported.ml", lines 88-91, characters 0-3:
+  88 | module Named_sig_mod : Ext_helpers.S = struct
+  89 |   let from_named_sig () = ()
+  90 |   let priv = 2
+  91 | end
+  Warning 60 [unused-module]: unused module Named_sig_mod.
+  
+  File "unsupported.ml", line 103, characters 0-22:
+  103 | type client_type = int
         ^^^^^^^^^^^^^^^^^^^^^^
   Warning 34 [unused-type-declaration]: unused type client_type.
   
-  File "unsupported.ml", line 105, characters 21-34:
-  105 | type action = Shared | Client_only
+  File "unsupported.ml", line 104, characters 21-34:
+  104 | type action = Shared | Client_only
                              ^^^^^^^^^^^^^
   Warning 37 [unused-constructor]: unused constructor Client_only.
   
-  File "unsupported.ml", line 106, characters 29-49:
-  106 | type state = { shared : int; client_only : string }
+  File "unsupported.ml", line 105, characters 29-49:
+  105 | type state = { shared : int; client_only : string }
                                      ^^^^^^^^^^^^^^^^^^^^
   Warning 69 [unused-field]: record field client_only is never read.
     (However, this field is used to build or mutate values.)
   
-  File "unsupported.ml", line 108, characters 0-20:
-  108 | exception Client_exn
+  File "unsupported.ml", line 107, characters 0-20:
+  107 | exception Client_exn
         ^^^^^^^^^^^^^^^^^^^^
   Warning 38 [unused-extension]: unused exception Client_exn
 

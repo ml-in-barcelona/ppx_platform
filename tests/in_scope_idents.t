@@ -1,7 +1,11 @@
 Detecting in-scope identifiers inside melange_only on native.
 
-Set up a stub Ppx_platform runtime and an interface file so ocamlc -w +A checks
-all unused warnings (26, 27, 32, 33, 34, 37, 38, 39, 60, 69) and @melange_only alerts.
+On native, a name used only in discarded code gets a `let _ = name` at the kept
+position when the name is a plain name bound locally in the enclosing
+expression: let bindings, function parameters, pattern variables, for-loop
+indices, binding operators, object self and instance variables, and the names
+of the enclosing `let rec`. Top-level values, module paths and names from opens
+or includes never get one.
 
   $ cat > ppx_platform.ml << 'EOF'
   > exception Melange_only of string
@@ -9,29 +13,22 @@ all unused warnings (26, 27, 32, 33, 34, 37, 38, 39, 60, 69) and @melange_only a
   > EOF
   $ ocamlc -c ppx_platform.ml
 
-1. All supported in-scope bindings compile with zero unused warnings under -w +A
+1. Local names compile with zero warnings under -w +A -warn-error +A
 
   $ cat > supported.mli << 'EOF'
   > val use_state_example : unit -> int
   > val enclosing_params :
   >   int -> label:string -> ?opt:int -> (int * int) -> unit -> unit
-  > val top_level_caller : unit -> unit
   > val use_rec : int -> unit [@@alert melange_only]
   > val use_let_unit : int -> unit
-  > val use_pexp_ident : unit -> unit [@@alert melange_only]
   > val use_function_cases : int -> unit [@@alert melange_only]
   > val use_constrained_fun : int -> unit
   > val use_default_param : ?abort:int -> unit -> unit [@@alert melange_only]
-  > val use_shadowed_default : ?x:int -> unit -> unit [@@alert melange_only]
+  > val use_shadowed_default : int -> ?x:int -> unit -> unit
   > val use_melange_only_default : ?el:int -> unit -> unit [@@alert melange_only]
   > val use_enclosing_constructs : int option -> int list -> unit
-  > val use_inline_include_and_open : unit -> unit [@@alert melange_only]
-  > val use_local_modules : (module Set.S) -> unit
   > val use_sequential_local_melange_only : int -> unit -> unit
   > val use_object : unit -> < run : unit -> unit >
-  > module Use_functor : functor (Arg : sig type t val go : t -> unit end) -> sig
-  >   val run : Arg.t -> unit [@@alert melange_only]
-  > end
   > EOF
 
   $ cat > supported_input.ml << 'EOF'
@@ -51,22 +48,6 @@ all unused warnings (26, 27, 32, 33, 34, 37, 38, 39, 60, 69) and @melange_only a
   >   in
   >   fun () -> ignore handler
   > 
-  > (* Top-level values, operators, binding operators, primitives, and earlier let%melange_only *)
-  > let top_helper x = x + 1
-  > let ( ++ ) a b = a ^ b
-  > let ( let+ ) x f = f x
-  > external ext_fn : int -> int = "%identity"
-  > let [@melange_only] dropped_js_only = Js.null
-  > 
-  > let%melange_only mel_helper x = Js.log (top_helper x)
-  > 
-  > let top_level_caller =
-  >   [%melange_only
-  >     fun () ->
-  >       let+ v = ext_fn 1 in
-  >       mel_helper v;
-  >       Js.log (dropped_js_only, "a" ++ "b")]
-  > 
   > (* Recursive let%melange_only (avoids Warning 39 unused rec) *)
   > let%melange_only rec use_rec n =
   >   if n > 0 then use_rec (n - 1) else Js.log n
@@ -76,30 +57,23 @@ all unused warnings (26, 27, 32, 33, 34, 37, 38, 39, 60, 69) and @melange_only a
   >   let%melange_only () = Js.log x in
   >   ()
   > 
-  > (* Pexp_ident pointing to an in-scope value *)
-  > let ident_target () = ()
-  > let%melange_only use_pexp_ident = ident_target
-  > 
   > (* Pfunction_cases (function | ... -> ...) *)
-  > let cases_helper x = x + 1
   > let%melange_only use_function_cases = function
-  >   | x when x < 0 -> Js.log (cases_helper x)
+  >   | x when x < 0 -> Js.log x
   >   | _ -> Js.log ()
   > 
   > (* Constrained [%melange_only (fun ... : ...)] *)
-  > let constrained_helper x = x + 1
   > let use_constrained_fun =
-  >   [%melange_only (fun x -> Js.log (constrained_helper x) : int -> unit)]
+  >   [%melange_only (fun x -> Js.log x : int -> unit)]
   > 
-  > (* Default parameter expression referencing an in-scope value *)
-  > let default_base = "https://example.com"
-  > let%melange_only use_default_param ?abort ?(base = default_base) () =
+  > (* Optional parameter with a default expression *)
+  > let%melange_only use_default_param ?abort ?(base = "https://example.com") () =
   >   Js.log (abort, base)
   > 
-  > (* Default parameter referencing outer x that is shadowed by parameter ?x *)
-  > let x = 42
-  > let%melange_only use_shadowed_default ?(x = x) () =
-  >   Js.log x
+  > (* Default parameter referencing the enclosing x that is shadowed by parameter ?x *)
+  > let use_shadowed_default x =
+  >   let%melange_only f ?(x = x) () = Js.log x in
+  >   f
   > 
   > (* Default parameter referencing a Melange-only module is safely ignored *)
   > let%melange_only use_melange_only_default ?(el = Webapi.Dom.document) () =
@@ -129,18 +103,145 @@ all unused warnings (26, 27, 32, 33, 34, 37, 38, 39, 60, 69) and @melange_only a
   >     ignore h
   >   done
   > 
-  > (* Inline include struct / include [@native_only] struct / open struct / inline constrained include *)
+  > (* Sequential local let%melange_only where the second calls the first *)
+  > let use_sequential_local_melange_only x =
+  >   let%melange_only first () = Js.log x in
+  >   let%melange_only second () = first () in
+  >   second
+  > 
+  > (* Object self and instance val *)
+  > let use_object () =
+  >   object (self)
+  >     val state = 1
+  >     method run = [%melange_only fun () -> Js.log (self, state)]
+  >   end
+  > EOF
+
+  $ ./standalone.exe -impl supported_input.ml | ocamlformat - --enable-outside-detected-project --impl > supported.ml
+  $ ocamlc -c -w +A -warn-error +A -alert @melange_only supported.mli
+  $ ocamlc -c -w +A -warn-error +A -alert @melange_only -I . supported.ml
+
+Verify selected generated expansions:
+
+  $ grep -A 5 "let use_state_example" supported.ml
+  let use_state_example () =
+    let a, set_a = use_state 4 in
+    use_effect (fun () ->
+        let _ = set_a in
+        Ppx_platform.fail_melange_only "<unkwnown>");
+    a
+
+  $ grep -A 6 "let use_shadowed_default" supported.ml
+  let use_shadowed_default x =
+    let f ?x:_ =
+      let _ = x in
+      Ppx_platform.fail_melange_only "f"
+        [@@alert "-melange_only"]
+    in
+    f
+
+2. Shadowing and genuinely unused bindings STILL warn on native
+
+  $ cat > shadowing.mli << 'EOF'
+  > val use_shadowed : int -> unit -> unit
+  > val use_nonrec_rhs : int -> unit -> unit
+  > val use_param_shadow : int -> int -> unit
+  > val use_state_with_unused : unit -> unit
+  > EOF
+
+  $ cat > shadowing_input.ml << 'EOF'
+  > (* Enclosing parameter shadowed by inner let: it is NOT used and still warns W27 *)
+  > let use_shadowed shadowed_by_let =
+  >   let%melange_only f () =
+  >     let shadowed_by_let = 2 in
+  >     Js.log shadowed_by_let
+  >   in
+  >   f
+  > 
+  > (* Non-rec let x = x + 1 uses the enclosing x in its RHS: it IS used (no W27) *)
+  > let use_nonrec_rhs used_in_nonrec_rhs =
+  >   let%melange_only f () =
+  >     let used_in_nonrec_rhs = used_in_nonrec_rhs + 1 in
+  >     Js.log used_in_nonrec_rhs
+  >   in
+  >   f
+  > 
+  > (* Parameter shadows the enclosing parameter: it is NOT used and still warns W27 *)
+  > let use_param_shadow shadowed_by_param =
+  >   let%melange_only f shadowed_by_param = Js.log shadowed_by_param in
+  >   f
+  > 
+  > (* Unused sibling binding in useState still warns W27 while set_a does not *)
+  > let use_state init = (init, fun _ -> ())
+  > let use_effect (f : unit -> unit option) = ignore f
+  > let use_state_with_unused () =
+  >   let unused_a, set_a = use_state 4 in
+  >   use_effect [%melange_only fun () -> set_a 33; None]
+  > EOF
+
+  $ ./standalone.exe -impl shadowing_input.ml | ocamlformat - --enable-outside-detected-project --impl > shadowing.ml
+  $ ocamlc -c -w +A shadowing.mli
+  $ ocamlc -c -w +A -I . shadowing.ml
+  File "shadowing.ml", line 1, characters 17-32:
+  1 | let use_shadowed shadowed_by_let =
+                       ^^^^^^^^^^^^^^^
+  Warning 27 [unused-var-strict]: unused variable shadowed_by_let.
+  
+  File "shadowing.ml", line 13, characters 21-38:
+  13 | let use_param_shadow shadowed_by_param =
+                            ^^^^^^^^^^^^^^^^^
+  Warning 27 [unused-var-strict]: unused variable shadowed_by_param.
+  
+  File "shadowing.ml", line 25, characters 6-14:
+  25 |   let unused_a, set_a = use_state 4 in
+             ^^^^^^^^
+  Warning 27 [unused-var-strict]: unused variable unused_a.
+
+3. Top-level values, module paths, opens, includes, local modules and
+first-class modules get no ignore. The output compiles; the names used only in
+discarded code still warn on native.
+
+  $ cat > not_local.mli << 'EOF'
+  > val top_level_caller : unit -> unit
+  > val use_pexp_ident : unit -> unit [@@alert melange_only]
+  > val use_default_param : ?base:string -> unit -> unit [@@alert melange_only]
+  > val use_inline_include_and_open : unit -> unit [@@alert melange_only]
+  > val use_local_modules : (module Set.S) -> unit
+  > module Use_functor : functor (Arg : sig type t val go : t -> unit end) -> sig
+  >   val run : Arg.t -> unit [@@alert melange_only]
+  > end
+  > EOF
+
+  $ cat > not_local_input.ml << 'EOF'
+  > (* Top-level values, operators, binding operators, primitives, and earlier let%melange_only *)
+  > let top_helper x = x + 1
+  > let ( ++ ) a b = a ^ b
+  > let ( let+ ) x f = f x
+  > external ext_fn : int -> int = "%identity"
+  > let [@melange_only] dropped_js_only = Js.null
+  > 
+  > let%melange_only mel_helper x = Js.log (top_helper x)
+  > 
+  > let top_level_caller =
+  >   [%melange_only
+  >     fun () ->
+  >       let+ v = ext_fn 1 in
+  >       mel_helper v;
+  >       Js.log (dropped_js_only, "a" ++ "b")]
+  > 
+  > (* Pexp_ident pointing to a top-level value *)
+  > let ident_target () = ()
+  > let%melange_only use_pexp_ident = ident_target
+  > 
+  > (* Default parameter expression referencing a top-level value *)
+  > let default_base = "https://example.com"
+  > let%melange_only use_default_param ?(base = default_base) () =
+  >   Js.log base
+  > 
+  > (* Inline include struct / open struct / inline constrained include *)
   > include struct
   >   let from_inline_include = 1
   > end
-  > 
-  > include struct
-  >   let from_native_only_include = 2
-  > end [@@native_only]
-  > 
-  > include struct
-  >   let from_melange_only_include = Js.null
-  > end [@@melange_only]
   > 
   > open struct
   >   let from_inline_open = 3
@@ -154,20 +255,11 @@ all unused warnings (26, 27, 32, 33, 34, 37, 38, 39, 60, 69) and @melange_only a
   >   end)
   > 
   > let%melange_only use_inline_include_and_open () =
-  >   Js.log
-  >     ( from_inline_include,
-  >       from_native_only_include,
-  >       from_melange_only_include,
-  >       from_inline_open,
-  >       from_inline_sig_include )
+  >   Js.log (from_inline_include, from_inline_open, from_inline_sig_include)
   > 
-  > (* Local unconstrained structs, nested structs, aliases, local open/include,
-  >    inline constrained modules, opaque module aliases, local let module, and first-class module unpacks *)
+  > (* Module paths, aliases, top-level open/include, local let module, and first-class module unpacks *)
   > module Local_struct = struct
   >   let member = 10
-  >   module Sub = struct
-  >     let deep = 20
-  >   end
   > end
   > 
   > module Local_alias = Local_struct
@@ -182,55 +274,22 @@ all unused warnings (26, 27, 32, 33, 34, 37, 38, 39, 60, 69) and @melange_only a
   > end
   > include Included_local
   > 
-  > module Dot_opened = struct
-  >   let from_dot_open = 50
-  > end
-  > 
-  > module Constrained_inline : sig
-  >   val pub : int
-  > end = struct
-  >   let pub = 55
-  > end
-  > 
-  > module Ext_alias = List
-  > module Type_only_mod = String
-  > 
   > let use_local_modules (module Unpacked : Set.S) =
   >   let module Local_in_fn = struct
   >     let local_val = 60
   >   end in
-  >   let module Opaque_in_fn = Bytes in
   >   let h =
   >     [%melange_only
   >       fun () ->
-  >         let _ : Type_only_mod.t = "" in
   >         Js.log
   >           ( Local_struct.member,
-  >             Local_struct.Sub.deep,
   >             Local_alias.member,
   >             from_opened_local,
   >             from_included_local,
-  >             Dot_opened.(from_dot_open),
-  >             Constrained_inline.pub,
-  >             Ext_alias.length [],
   >             Local_in_fn.local_val,
-  >             Opaque_in_fn.empty,
   >             Unpacked.empty )]
   >   in
   >   ignore h
-  > 
-  > (* Sequential local let%melange_only where the second calls the first *)
-  > let use_sequential_local_melange_only x =
-  >   let%melange_only first () = Js.log x in
-  >   let%melange_only second () = first () in
-  >   second
-  > 
-  > (* Object self and instance val *)
-  > let use_object () =
-  >   object (self)
-  >     val state = 1
-  >     method run = [%melange_only fun () -> Js.log (self, state)]
-  >   end
   > 
   > (* Functor parameter with inline signature *)
   > module Use_functor (Arg : sig type t val go : t -> unit end) = struct
@@ -238,85 +297,109 @@ all unused warnings (26, 27, 32, 33, 34, 37, 38, 39, 60, 69) and @melange_only a
   > end
   > EOF
 
-  $ ./standalone.exe -impl supported_input.ml | ocamlformat - --enable-outside-detected-project --impl > supported.ml
-  $ ocamlc -c -w +A -alert @melange_only supported.mli
-  $ ocamlc -c -w +A -alert @melange_only -I . supported.ml
-
-Verify selected generated expansions:
-
-  $ grep -A 5 "let use_state_example" supported.ml
-  let use_state_example () =
-    let a, set_a = use_state 4 in
-    use_effect (fun () ->
-        let _ = set_a in
-        Ppx_platform.fail_melange_only "<unkwnown>");
-    a
-
-  $ grep -A 7 "let (use_shadowed_default" supported.ml
-  let (use_shadowed_default
-       [@alert
-         melange_only
-           "This value only exists in the Melange build. Use it inside a \
-            let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?x:_ ->
-    let _ = x in
-    Ppx_platform.fail_melange_only "use_shadowed_default")
-
-2. Shadowing and genuinely unused bindings STILL warn on native
-
-  $ cat > shadowing.mli << 'EOF'
-  > val use_shadowed : unit -> unit [@@alert melange_only]
-  > val use_nonrec_rhs : unit -> unit [@@alert melange_only]
-  > val use_param_shadow : int -> unit [@@alert melange_only]
-  > val use_state_with_unused : unit -> unit
-  > EOF
-
-  $ cat > shadowing_input.ml << 'EOF'
-  > (* Outer x shadowed by inner let x = 2: outer x is NOT used and still warns W32 *)
-  > let shadowed_by_let = 1
-  > let%melange_only use_shadowed () =
-  >   let shadowed_by_let = 2 in
-  >   Js.log shadowed_by_let
-  > 
-  > (* Non-rec let x = x + 1 uses outer x in its RHS: outer x IS used (no W32) *)
-  > let used_in_nonrec_rhs = 1
-  > let%melange_only use_nonrec_rhs () =
-  >   let used_in_nonrec_rhs = used_in_nonrec_rhs + 1 in
-  >   Js.log used_in_nonrec_rhs
-  > 
-  > (* Parameter shadows outer binding: outer binding is NOT used and still warns W32 *)
-  > let shadowed_by_param = 1
-  > let%melange_only use_param_shadow shadowed_by_param =
-  >   Js.log shadowed_by_param
-  > 
-  > (* Unused sibling binding in useState still warns W26 while set_a does not *)
-  > let use_state init = (init, fun _ -> ())
-  > let use_effect (f : unit -> unit option) = ignore f
-  > let use_state_with_unused () =
-  >   let unused_a, set_a = use_state 4 in
-  >   use_effect [%melange_only fun () -> set_a 33; None]
-  > EOF
-
-  $ ./standalone.exe -impl shadowing_input.ml | ocamlformat - --enable-outside-detected-project --impl > shadowing.ml
-  $ ocamlc -c -w +A shadowing.mli
-  $ ocamlc -c -w +A -I . shadowing.ml
-  File "shadowing.ml", line 1, characters 4-19:
-  1 | let shadowed_by_let = 1
-          ^^^^^^^^^^^^^^^
-  Warning 32 [unused-value-declaration]: unused value shadowed_by_let.
+  $ ./standalone.exe -impl not_local_input.ml | ocamlformat - --enable-outside-detected-project --impl > not_local.ml
+  $ grep -n "let _ = \|let module _" not_local.ml
+  13:  let _ = x in
+  37:  let _ = base in
+  106:    let _ = v in
+  $ ocamlc -c -w +A -alert @melange_only not_local.mli
+  $ ocamlc -c -w +A -alert @melange_only -I . not_local.ml
+  File "not_local.ml", line 1, characters 4-14:
+  1 | let top_helper x = x + 1
+          ^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value top_helper.
   
-  File "shadowing.ml", line 26, characters 4-21:
-  26 | let shadowed_by_param = 1
-           ^^^^^^^^^^^^^^^^^
-  Warning 32 [unused-value-declaration]: unused value shadowed_by_param.
+  File "not_local.ml", line 2, characters 4-10:
+  2 | let ( ++ ) a b = a ^ b
+          ^^^^^^
+  Warning 32 [unused-value-declaration]: unused value ++.
   
-  File "shadowing.ml", line 43, characters 6-14:
-  43 |   let unused_a, set_a = use_state 4 in
-             ^^^^^^^^
-  Warning 27 [unused-var-strict]: unused variable unused_a.
+  File "not_local.ml", line 3, characters 4-12:
+  3 | let ( let+ ) x f = f x
+          ^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value let+.
+  
+  File "not_local.ml", line 5, characters 0-42:
+  5 | external ext_fn : int -> int = "%identity"
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value ext_fn.
+  
+  File "not_local.ml", line 19, characters 4-16:
+  19 | let ident_target () = ()
+           ^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value ident_target.
+  
+  File "not_local.ml", line 29, characters 4-16:
+  29 | let default_base = "https://example.com"
+           ^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value default_base.
+  
+  File "not_local.ml", line 43, characters 6-25:
+  43 |   let from_inline_include = 1
+             ^^^^^^^^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value from_inline_include.
+  
+  File "not_local.ml", line 47, characters 6-22:
+  47 |   let from_inline_open = 3
+             ^^^^^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value from_inline_open.
+  
+  File "not_local.ml", line 55, characters 6-39:
+  55 |       val from_inline_sig_include : int
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value from_inline_sig_include.
+  
+  File "not_local.ml", line 69, characters 6-12:
+  69 |   let member = 10
+             ^^^^^^
+  Warning 32 [unused-value-declaration]: unused value member.
+  
+  File "not_local.ml", line 72, characters 0-33:
+  72 | module Local_alias = Local_struct
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Warning 60 [unused-module]: unused module Local_alias.
+  
+  File "not_local.ml", line 75, characters 6-23:
+  75 |   let from_opened_local = 30
+             ^^^^^^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value from_opened_local.
+  
+  File "not_local.ml", line 78, characters 0-17:
+  78 | open Opened_local
+       ^^^^^^^^^^^^^^^^^
+  Warning 33 [unused-open]: unused open Opened_local.
+  
+  File "not_local.ml", line 81, characters 6-25:
+  81 |   let from_included_local = 40
+             ^^^^^^^^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value from_included_local.
+  
+  File "not_local.ml", line 86, characters 30-38:
+  86 | let use_local_modules (module Unpacked : Set.S) =
+                                     ^^^^^^^^
+  Warning 60 [unused-module]: unused module Unpacked.
+  
+  File "not_local.ml", line 88, characters 8-17:
+  88 |     let local_val = 60
+               ^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value local_val.
+  
+  File "not_local.ml", line 87, characters 13-24:
+  87 |   let module Local_in_fn = struct
+                    ^^^^^^^^^^^
+  Warning 60 [unused-module]: unused module Local_in_fn.
+  
+  File "not_local.ml", line 96, characters 2-20:
+  96 |   val go : t -> unit
+         ^^^^^^^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value go.
+  
+  File "not_local.ml", line 93, characters 20-23:
+  93 | module Use_functor (Arg : sig
+                           ^^^
+  Warning 60 [unused-module]: unused module Arg.
 
-Bindings wrapped in `[%%private ...]` (Melange private items) are visible inside the enclosing structure,
-but not exported through a module boundary:
+Bindings wrapped in `[%%private ...]` are top-level values, so they get no ignore either:
 
   $ cat > private_input.ml << 'EOF'
   > [%%private let secret = "k"]
@@ -344,7 +427,6 @@ but not exported through a module boundary:
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun () ->
-    let _ = secret in
     Ppx_platform.fail_melange_only "private_helper")
     [@alert "-melange_only"]
   [@@warning "-32"]]
@@ -355,12 +437,5 @@ but not exported through a module boundary:
     let visible = 2
   end
   
-  let use_priv () =
-    let _ = private_helper [@@alert "-melange_only"] in
-    let _ = secret in
-    let _ = M.visible in
-    Ppx_platform.fail_melange_only "<unkwnown>"
-  
-  let use_hidden_mod () =
-    let module _ = M in
-    Ppx_platform.fail_melange_only "<unkwnown>"
+  let use_priv () = Ppx_platform.fail_melange_only "<unkwnown>"
+  let use_hidden_mod () = Ppx_platform.fail_melange_only "<unkwnown>"

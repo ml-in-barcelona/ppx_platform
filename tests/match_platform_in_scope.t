@@ -6,7 +6,7 @@ Detecting in-scope identifiers in the discarded branch of match%platform on both
   > EOF
   $ ocamlc -c ppx_platform.ml
 
-1. Compiles with zero warnings and zero @melange_only alerts on BOTH Native and Js (-js)
+1. Compiles with zero warnings and zero @melange_only alerts on BOTH Native and Js (-js) under -warn-error +A
 
   $ cat > both.mli << 'EOF'
   > val param_melange_only : int -> int
@@ -15,10 +15,8 @@ Detecting in-scope identifiers in the discarded branch of match%platform on both
   > val local_let_discarded : unit -> int
   > val local_melange_only_called_in_match : int -> int option
   > val top_melange_only_called_in_match : int -> int
-  > val sig_melange_only_called_in_match : int -> int
   > val rec_only_in_melange : int -> int
   > val rec_only_in_native : int -> int
-  > val local_modules : unit -> int
   > val dropped_items_not_referenced : unit -> int
   > val kept_branch_preprocessed : int -> int
   > val poly_preserved : int list * string list
@@ -67,18 +65,6 @@ Detecting in-scope identifiers in the discarded branch of match%platform on both
   >   | Native -> 0
   >   | Melange -> top_mel_helper x
   > 
-  > (* Inline-sig module with [@@alert melange_only] called only in Melange branch *)
-  > module Sig_mod : sig
-  >   val f : int -> int [@@alert melange_only]
-  > end = struct
-  >   let%melange_only f x = x + 1
-  > end
-  > 
-  > let sig_melange_only_called_in_match x =
-  >   match%platform () with
-  >   | Native -> 0
-  >   | Melange -> Sig_mod.f x
-  > 
   > (* let rec that only recurses in one branch (avoids W39 unused-rec-flag) *)
   > let rec rec_only_in_melange x =
   >   match%platform () with
@@ -89,18 +75,6 @@ Detecting in-scope identifiers in the discarded branch of match%platform on both
   >   match%platform () with
   >   | Native -> if x > 0 then rec_only_in_native (x - 1) else 0
   >   | Melange -> x
-  > 
-  > (* Local struct and opaque module alias used only in discarded branch *)
-  > module Local_struct = struct
-  >   let nat = 1
-  >   let mel = 2
-  > end
-  > module List_alias = List
-  > 
-  > let local_modules () =
-  >   match%platform () with
-  >   | Native -> Local_struct.nat
-  >   | Melange -> Local_struct.mel + List_alias.length []
   > 
   > (* Items dropped by [@@melange_only] / [@@native_only] are not emitted as let _ = *)
   > let only_on_melange = 10 [@@melange_only]
@@ -131,8 +105,8 @@ Detecting in-scope identifiers in the discarded branch of match%platform on both
   >       x + v
   > 
   > (* Value restriction: polymorphic value stays polymorphic when wrapped in let _ = *)
-  > let poly_helper = 1
   > let poly_empty =
+  >   let poly_helper = 1 in
   >   match%platform () with
   >   | Native -> []
   >   | Melange -> if poly_helper > 0 then [] else []
@@ -153,10 +127,10 @@ Detecting in-scope identifiers in the discarded branch of match%platform on both
 
   $ cp both.mli both_native.mli
   $ cp both.mli both_js.mli
-  $ ocamlc -c -w +A -alert @melange_only both_native.mli
-  $ ocamlc -c -w +A -alert @melange_only -I . both_native.ml
-  $ ocamlc -c -w +A -alert -melange_only both_js.mli
-  $ ocamlc -c -w +A -alert -melange_only -I . both_js.ml
+  $ ocamlc -c -w +A -warn-error +A -alert @melange_only both_native.mli
+  $ ocamlc -c -w +A -warn-error +A -alert @melange_only -I . both_native.ml
+  $ ocamlc -c -w +A -warn-error +A -alert -melange_only both_js.mli
+  $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I . both_js.ml
 
 Verify selected generated expansions:
 
@@ -168,9 +142,8 @@ Verify selected generated expansions:
     let _ = rec_only_in_melange in
     x
 
-  $ grep -A 3 "let top_melange_only_called_in_match" both_native.ml
+  $ grep -A 2 "let top_melange_only_called_in_match" both_native.ml
   let top_melange_only_called_in_match x =
-    let _ = top_mel_helper [@@alert "-melange_only"] in
     let _ = x in
     0
 
@@ -218,3 +191,80 @@ Verify selected generated expansions:
                                               ^^^^^^^^^^^^^^^^
   Warning 27 [unused-var-strict]: unused variable genuinely_unused.
   [2]
+
+3. Module paths get no ignore: the output compiles on both targets, and members
+used only in the discarded branch still warn
+
+  $ cat > modules.mli << 'EOF'
+  > val sig_melange_only_called_in_match : int -> int
+  > val local_modules : unit -> int
+  > EOF
+
+  $ cat > modules_input.ml << 'EOF'
+  > (* Inline-sig module with [@@alert melange_only] called only in Melange branch *)
+  > module Sig_mod : sig
+  >   val f : int -> int [@@alert melange_only]
+  > end = struct
+  >   let%melange_only f x = x + 1
+  > end
+  > 
+  > let sig_melange_only_called_in_match x =
+  >   match%platform () with
+  >   | Native -> 0
+  >   | Melange -> Sig_mod.f x
+  > 
+  > (* Local struct and opaque module alias used only in discarded branch *)
+  > module Local_struct = struct
+  >   let nat = 1
+  >   let mel = 2
+  > end
+  > module List_alias = List
+  > 
+  > let local_modules () =
+  >   match%platform () with
+  >   | Native -> Local_struct.nat
+  >   | Melange -> Local_struct.mel + List_alias.length []
+  > EOF
+
+  $ ./standalone.exe -impl modules_input.ml | ocamlformat - --enable-outside-detected-project --impl > modules_native.ml
+  $ ./standalone.exe -impl modules_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > modules_js.ml
+  $ grep -n "let _ = \|let module _" modules_native.ml modules_js.ml
+  modules_native.ml:11:    let _ = x in
+  modules_native.ml:18:  let _ = x in
+  $ cp modules.mli modules_native.mli
+  $ cp modules.mli modules_js.mli
+  $ ocamlc -c -w +A -alert @melange_only modules_native.mli
+  $ ocamlc -c -w +A -alert @melange_only -I . modules_native.ml
+  File "modules_native.ml", line 2, characters 2-43:
+  2 |   val f : int -> int [@@alert melange_only]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Warning 32 [unused-value-declaration]: unused value f.
+  
+  File "modules_native.ml", lines 1-15, characters 0-3:
+   1 | module Sig_mod : sig
+   2 |   val f : int -> int [@@alert melange_only]
+   3 | end = struct
+   4 |   let (f
+   5 |        [@alert
+  ...
+  12 |     Ppx_platform.fail_melange_only "f")
+  13 |     [@alert "-melange_only"]
+  14 |   [@@warning "-32"]
+  15 | end
+  Warning 60 [unused-module]: unused module Sig_mod.
+  
+  File "modules_native.ml", line 23, characters 6-9:
+  23 |   let mel = 2
+             ^^^
+  Warning 32 [unused-value-declaration]: unused value mel.
+  
+  File "modules_native.ml", line 26, characters 0-24:
+  26 | module List_alias = List
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+  Warning 60 [unused-module]: unused module List_alias.
+  $ ocamlc -c -w +A -alert -melange_only modules_js.mli
+  $ ocamlc -c -w +A -alert -melange_only -I . modules_js.ml
+  File "modules_js.ml", line 10, characters 6-9:
+  10 |   let nat = 1
+             ^^^
+  Warning 32 [unused-value-declaration]: unused value nat.
