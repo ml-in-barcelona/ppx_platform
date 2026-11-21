@@ -79,9 +79,10 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun evt ->
+    let _ = evt in
     Ppx_platform.fail_melange_only "valueFromEvent")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (getSortedWordCountsBrowserOnly
        [@alert
@@ -89,19 +90,22 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
+    let _ = words in
     Ppx_platform.fail_melange_only "getSortedWordCountsBrowserOnly")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (renderToElementWithId
        [@alert
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?id component ->
+   (fun ?(id = "") component ->
+    let _ = component in
+    let _ = id in
     Ppx_platform.fail_melange_only "renderToElementWithId")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (getSortedWordCountsBrowserOnly
        [@alert
@@ -109,9 +113,10 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
+    let _ = words in
     Ppx_platform.fail_melange_only "getSortedWordCountsBrowserOnly")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (getSortedWordCountsBrowserOnly
        [@alert
@@ -119,6 +124,7 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun words ->
+    let _ = words in
     Ppx_platform.fail_melange_only "getSortedWordCountsBrowserOnly")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]

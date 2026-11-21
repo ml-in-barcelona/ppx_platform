@@ -66,7 +66,7 @@
   };
 
   $ ../standalone.exe -impl input.ml | refmt --parse ml --print re
-  [@warning "-27-32"]
+  [@warning "-32"]
   let [@alert
         melange_only(
           "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.",
@@ -75,6 +75,12 @@
       makeQuery =
     [@alert "-melange_only"]
     (
-      (~abortController, ~encoding=?, pathname, req, input) =>
-        Ppx_platform.fail_melange_only("makeQuery")
+      (~abortController, ~encoding=?, pathname, req, input) => {
+        let _ = abortController;
+        let _ = encoding;
+        let _ = input;
+        let _ = pathname;
+        let _ = req;
+        Ppx_platform.fail_melange_only("makeQuery");
+      }
     );

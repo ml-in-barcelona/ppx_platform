@@ -60,18 +60,24 @@
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun a b -> Ppx_platform.fail_melange_only "two_args") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+   (fun a b ->
+    let _ = a in
+    let _ = b in
+    Ppx_platform.fail_melange_only "two_args")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
   
   let (optional_args
        [@alert
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?abort ?base () ->
+   (fun ?abort ?(base = 1) _ ->
+    let _ = abort in
+    let _ = base in
     Ppx_platform.fail_melange_only "optional_args")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (labelled_args
        [@alert
@@ -79,9 +85,11 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun ~first ~second ->
+    let _ = first in
+    let _ = second in
     Ppx_platform.fail_melange_only "labelled_args")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (constrained
        [@alert
@@ -89,36 +97,54 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun a b ->
+    let _ = a in
+    let _ = b in
     Ppx_platform.fail_melange_only "constrained")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (newtype
        [@alert
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun (type a) x y ->
+   (fun x y ->
+    let _ = x in
+    let _ = y in
     Ppx_platform.fail_melange_only "newtype")
     [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
   
   let (cases
        [@alert
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun a _ -> Ppx_platform.fail_melange_only "cases") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+   (fun a _ ->
+    let _ = a in
+    Ppx_platform.fail_melange_only "cases")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
   
   let make () =
-    let inner a b =
+    let (inner
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun a b ->
+      let _ = a in
+      let _ = b in
       Ppx_platform.fail_melange_only "inner"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
     inner
   
-  let expression a b = Ppx_platform.fail_melange_only "a"
+  let expression a b =
+    let _ = a in
+    let _ = b in
+    Ppx_platform.fail_melange_only "input.ml:19:18"
   
   module type S = sig
     val x : int
@@ -129,16 +155,22 @@
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun _ a -> Ppx_platform.fail_melange_only "fcm1") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+   (fun _ a ->
+    let _ = a in
+    Ppx_platform.fail_melange_only "fcm1")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
   
   let (fcm2
        [@alert
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun a _ -> Ppx_platform.fail_melange_only "fcm2") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+   (fun a _ ->
+    let _ = a in
+    Ppx_platform.fail_melange_only "fcm2")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
   
   let (fcm3
        [@alert
@@ -146,7 +178,7 @@
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
    (fun _ -> Ppx_platform.fail_melange_only "fcm3") [@alert "-melange_only"]
-  [@@warning "-27-32"]
+  [@@warning "-32"]
 
 The native output keeps every parameter in its inferred type
 
@@ -154,7 +186,7 @@ The native output keeps every parameter in its inferred type
   $ ocamlc -c ppx_platform.ml
   $ ocamlc -i -alert -melange_only native.ml
   val two_args : 'a -> 'b -> 'c
-  val optional_args : ?abort:'a -> ?base:'b -> unit -> 'c
+  val optional_args : ?abort:'a -> ?base:int -> 'b -> 'c
   val labelled_args : first:'a -> second:'b -> 'c
   val constrained : 'a -> 'b -> 'c
   val newtype : 'a -> 'b -> 'c
@@ -209,7 +241,7 @@ Partial application does not raise; full application raises Melange_only
   cases full: raises cases
   inner partial: no raise
   expression partial: no raise
-  expression full: raises a
+  expression full: raises input.ml:19:18
 
 The -js output type-checks against the same signature
 

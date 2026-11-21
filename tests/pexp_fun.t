@@ -50,17 +50,43 @@ Without -js flag, the compilation to native replaces the expression with a raise
 
   $ cat output.ml
   let make () =
-    let fun_value_binding_pexp_fun_2arg evt moar_arguments =
+    let (fun_value_binding_pexp_fun_2arg
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun evt moar_arguments ->
+      let _ = evt in
+      let _ = moar_arguments in
       Ppx_platform.fail_melange_only "fun_value_binding_pexp_fun_2arg"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    let perform ?abortController ?base req input =
+    let (perform
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun ?abortController ?base req input ->
+      let _ = abortController in
+      let _ = base in
+      let _ = input in
+      let _ = req in
       Ppx_platform.fail_melange_only "perform"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    let fun_value_binding_labelled_args ~argument1 ~argument2 =
+    let (fun_value_binding_labelled_args
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun ~argument1 ~argument2 ->
+      let _ = argument1 in
+      let _ = argument2 in
       Ppx_platform.fail_melange_only "fun_value_binding_labelled_args"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
     ()
 

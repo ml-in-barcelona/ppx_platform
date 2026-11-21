@@ -53,10 +53,19 @@
   $ ./standalone.exe -impl input.ml | refmt --parse ml --print re
   let make = () => {
     [@alert "-melange_only"]
-    let discard = value => Ppx_platform.fail_melange_only("discard");
+    let [@alert
+          melange_only(
+            "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.",
+          )
+        ]
+        discard =
+      value => {
+        let _ = value;
+        Ppx_platform.fail_melange_only("discard");
+      };
     ();
   };
-  [@warning "-27-32"]
+  [@warning "-32"]
   let [@alert
         melange_only(
           "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.",
@@ -64,4 +73,9 @@
       ]
       reifyStyle =
     [@alert "-melange_only"]
-    ((type a, x) => Ppx_platform.fail_melange_only("reifyStyle"));
+    (
+      x => {
+        let _ = x;
+        Ppx_platform.fail_melange_only("reifyStyle");
+      }
+    );

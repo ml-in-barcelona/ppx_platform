@@ -11,7 +11,7 @@ With -js flag it picks the block with `[@@melange_only]`
   $ ./standalone.exe -impl input_include.ml -js | ocamlformat - --enable-outside-detected-project --impl
   include struct
     type t = Js.Json.t
-  end [@@melange_only]
+  end
 
 Without -js flag, it picks the block without `[@@melange_only]`
 
@@ -31,7 +31,6 @@ Pstr_module
   module M = struct
     let x = 42
   end
-  [@@melange_only]
 
 Pstr_value
 
@@ -44,7 +43,7 @@ Pstr_value
   let y = 44
 
   $ ./standalone.exe -impl input_value.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  let x = 42 [@@melange_only]
+  let x = 42
   let y = 44
 
 Nested
@@ -67,7 +66,6 @@ With -js flag it picks the block with `[@@melange_only]`
   
       let a = 4 + 4
     end
-    [@@melange_only]
   end
 
 Without -js flag, it picks the block without `[@@melange_only]`
@@ -85,7 +83,7 @@ Ppat_tuple
   let x, _ = (42, 44)
 
   $ ./standalone.exe -impl input_tuple.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  let x, (y [@melange_only]) = (42, 44)
+  let x, y = (42, 44)
 
   $ ./standalone.exe -impl input_tuple.ml > input_tuple_server.ml && ocamlc -c input_tuple_server.ml
 
@@ -101,8 +99,8 @@ Ppat_var
   let y ~onClick:_ = 42
 
   $ ./standalone.exe -impl input_var.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  let x (onClick [@melange_only]) = 24
-  let y ~onClick:(onClick [@melange_only]) = 42
+  let x onClick = 24
+  let y ~onClick = 42
 
   $ ./standalone.exe -impl input_var.ml > input_var_server.ml && ocamlc -c input_var_server.ml
 
@@ -115,7 +113,7 @@ Pstr_open
   $ ./standalone.exe -impl input_open.ml | ocamlformat - --enable-outside-detected-project --impl
 
   $ ./standalone.exe -impl input_open.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  open Printf [@@melange_only]
+  open Printf
 
   $ ./standalone.exe -impl input_open.ml > input_open_server.ml && ocamlc -c input_open_server.ml
 
@@ -126,7 +124,7 @@ Pstr_exception
   > EOF
 
   $ ./standalone.exe -impl input_exception.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  exception MyException of string [@@melange_only]
+  exception MyException of string
 
   $ ./standalone.exe -impl input_exception.ml | ocamlformat - --enable-outside-detected-project --impl
 
@@ -139,7 +137,7 @@ Pstr_primitive
   > EOF
 
   $ ./standalone.exe -impl input_primitive.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  external add : int -> int -> int = "caml_add_int" [@@melange_only]
+  external add : int -> int -> int = "caml_add_int"
 
   $ ./standalone.exe -impl input_primitive.ml | ocamlformat - --enable-outside-detected-project --impl
 
@@ -152,7 +150,7 @@ Pstr_eval
   > EOF
 
   $ ./standalone.exe -impl input_primitive.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  2 [@@melange_only]
+  2
 
   $ ./standalone.exe -impl input_primitive.ml | ocamlformat - --enable-outside-detected-project --impl
 
@@ -165,7 +163,7 @@ Pstr_type
   > EOF
 
   $ ./standalone.exe -impl input_type.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  type point = { x : int; y : int } [@@melange_only]
+  type point = { x : int; y : int }
 
   $ ./standalone.exe -impl input_type.ml | ocamlformat - --enable-outside-detected-project --impl
 
@@ -183,7 +181,6 @@ Pstr_recmodule
   module rec M = struct
     let x = 42
   end
-  [@@melange_only]
 
   $ ./standalone.exe -impl input_recmodule.ml | ocamlformat - --enable-outside-detected-project --impl
 
@@ -199,7 +196,7 @@ Pstr_class
   class virtual ['a] base x =
     object
       method get = x
-    end [@@melange_only]
+    end
 
   $ ./standalone.exe -impl input_class.ml | ocamlformat - --enable-outside-detected-project --impl
 
@@ -214,7 +211,7 @@ Pstr_class_type
   $ ./standalone.exe -impl input_class_type.ml -js | ocamlformat - --enable-outside-detected-project --impl
   class type base = object
     method get : int
-  end [@@melange_only]
+  end
 
   $ ./standalone.exe -impl input_class_type.ml | ocamlformat - --enable-outside-detected-project --impl
 
@@ -227,11 +224,53 @@ Ppat_constraint
   > EOF
 
   $ ./standalone.exe -impl input_constr.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  let foo ~on:((on [@melange_only]) : unit -> string)
-      ?opt:((opt [@melange_only]) = 42) =
-    0
+  let foo ~(on : unit -> string) ?(opt = 42) = 0
   $ ./standalone.exe -impl input_constr.ml | ocamlformat - --enable-outside-detected-project --impl
   let foo ~on:_ ?opt:(_ = 42) = 0
+
+Pexp_open with [@melange_only] is an error on Native, located at the open, that
+says where to move the open.
+`let open [@melange_only] M in e` and `[@melange_only] M.(e)` give the same
+tree. Dropping only the open would leave names from M unbound in the body. On
+Melange the open stays.
+
+  $ cat > input_pexp_open.ml << EOF
+  > let f () =
+  >   let open [@melange_only] Webapi.Dom in
+  >   42
+  > EOF
+
+  $ ./standalone.exe -impl input_pexp_open.ml | ocamlformat - --enable-outside-detected-project --impl
+  let f () =
+    [%ocaml.error
+      "Don't use melange_only on open, move the open into a let%melange_only \
+       function or the Melange branch of match%platform"]
+
+  $ ./standalone.exe -impl input_pexp_open.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  let f () =
+    let open Webapi.Dom in
+    42
+
+  $ ./standalone.exe -impl input_pexp_open.ml > input_pexp_open_server.ml && ocamlc -c input_pexp_open_server.ml
+  File "input_pexp_open_server.ml", line 2, characters 4-15:
+  2 |   [%ocaml.error
+          ^^^^^^^^^^^
+  Error: Don't use melange_only on open, move the open into a let%melange_only
+         function or the Melange branch of match%platform
+  [2]
+
+  $ cat > input_pexp_open.re << EOF
+  > let f = () => {
+  >   [@melange_only] open Webapi.Dom;
+  >   42;
+  > };
+  > EOF
+  $ refmt --print ml input_pexp_open.re > input_pexp_open_re.ml
+  $ ./standalone.exe -impl input_pexp_open_re.ml | ocamlformat - --enable-outside-detected-project --impl
+  let f () =
+    [%ocaml.error
+      "Don't use melange_only on open, move the open into a let%melange_only \
+       function or the Melange branch of match%platform"]
 
 Pexp_* should be throw an error
 
