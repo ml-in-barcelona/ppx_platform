@@ -125,7 +125,7 @@ so warning 70 (missing mli) is off everywhere.
   [@@warning "-32"]
   
   let localBinding x =
-    let handler () =
+    let handler _ =
       let _ = x in
       Ppx_platform.fail_melange_only "handler"
         [@@alert "-melange_only"]
@@ -162,7 +162,7 @@ so warning 70 (missing mli) is off everywhere.
     let _ = x in
     y
   
-  let keptItem = 1 [@@native_only]
+  let keptItem = 1
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only bindings_native.ml
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only bindings_js.ml
 
@@ -206,10 +206,7 @@ destructuring, in the discarded function and in the enclosing function
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ~x ?y ?z () (a, b) { contents } ->
-    let _ = a in
-    let _ = b in
-    let _ = contents in
+   (fun ~x ?y ?(z = 1) _ _ _ ->
     let _ = x in
     let _ = y in
     let _ = z in
@@ -223,7 +220,7 @@ destructuring, in the discarded function and in the enclosing function
      fun (a, b) ->
       fun { contents } ->
        fun () ->
-        let handler () =
+        let handler _ =
           let _ = a in
           let _ = b in
           let _ = contents in
@@ -248,10 +245,10 @@ destructuring, in the discarded function and in the enclosing function
        ()
   
   let destructured (a, b) =
-   fun () ->
+   fun _ ->
     let _ = a in
     let _ = b in
-    Ppx_platform.fail_melange_only "<unkwnown>"
+    Ppx_platform.fail_melange_only "<unknown>"
   
   let curried x =
    fun a b ->
@@ -303,9 +300,9 @@ code
   $ cat hooks_native.ml
   let useEffectSetter () =
     let count, setCount = React.useState (fun () -> 0) in
-    React.useEffect0 (fun () ->
+    React.useEffect0 (fun _ ->
         let _ = setCount in
-        Ppx_platform.fail_melange_only "<unkwnown>");
+        Ppx_platform.fail_melange_only "<unknown>");
     count
   
   let useSwitchSetter () =
@@ -367,13 +364,13 @@ there: that is the accepted cost recorded in in_scope_idents_unsupported.t.
   
   let localOpenParen x =
     let open M in
-    fun () ->
+    fun _ ->
       let _ = x in
-      Ppx_platform.fail_melange_only "<unkwnown>"
+      Ppx_platform.fail_melange_only "<unknown>"
   
   let localOpenBlock x =
     let open M in
-    let handler () =
+    let handler _ =
       let _ = x in
       Ppx_platform.fail_melange_only "handler"
         [@@alert "-melange_only"]
@@ -416,7 +413,7 @@ not errors in this section.
   $ ./standalone.exe -impl shadow.ml -js | ocamlformat - --enable-outside-detected-project --impl > shadow_js.ml
   $ cat shadow_native.ml
   let shadowedByLet x =
-    let handler () =
+    let handler _ =
       Ppx_platform.fail_melange_only "handler"
         [@@alert "-melange_only"]
     in
@@ -482,27 +479,37 @@ current platform is an error, as in platform.t
     [%ocaml.error
       "Don't use melange_only on expressions, use switch%platform instead"]
   
-  let nativeOnlyExpr x = (x + 1) [@native_only]
+  let nativeOnlyExpr x = x + 1
   
   let melangeOnlyLocal x =
     [%ocaml.error
       "Don't use melange_only on expressions, use switch%platform instead"]
   $ ./standalone.exe -impl errors.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  let melangeOnlyExpr x = Js.log x [@melange_only]
+  let melangeOnlyExpr x = Js.log x
   
   let nativeOnlyExpr x =
     [%ocaml.error
       "Don't use native_only on expressions, use switch%platform instead"]
   
   let melangeOnlyLocal x =
-    let y = x [@@melange_only] in
+    let y = x in
     y
+
+The ppx removes the platform attributes from the items and expressions it
+keeps (see keptItem in section 1 and nativeOnlyExpr above):
+
+  $ grep -n "keptItem\|droppedItem" bindings_native.ml bindings_js.ml
+  bindings_native.ml:88:let keptItem = 1
+  bindings_js.ml:28:let droppedItem = Js.log 1
 
 Known issues
 
 [@melange_only] on a local open M.(...) drops only the open on Native and keeps
 the body, so names from the open are unbound. Expected: the same error as for
-other expressions in section 6.
+other expressions in section 6. The ppx gets the same tree for
+`let open [@melange_only] M in e`, where dropping only the open is the
+documented behaviour (at_melange_only.t), so it cannot tell the two forms
+apart.
 
   $ cat > open_attr.re << 'EOF'
   > module M = {
@@ -526,11 +533,3 @@ other expressions in section 6.
                            ^
   Error: Unbound value y
   [2]
-
-Platform attributes stay on the items and expressions the ppx keeps (see
-keptItem in section 1 and nativeOnlyExpr in section 6). Expected: the ppx
-removes them once it has applied them.
-
-  $ grep -n "native_only\|melange_only\]" bindings_native.ml bindings_js.ml
-  bindings_native.ml:88:let keptItem = 1 [@@native_only]
-  bindings_js.ml:28:let droppedItem = Js.log 1 [@@melange_only]

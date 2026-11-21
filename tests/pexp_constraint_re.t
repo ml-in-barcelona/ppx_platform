@@ -68,7 +68,7 @@
       reifyStyle =
     [@alert "-melange_only"]
     (
-      (type a, x) => {
+      x => {
         let _ = x;
         Ppx_platform.fail_melange_only("reifyStyle");
       }

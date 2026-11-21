@@ -72,7 +72,7 @@
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?abort ?base () ->
+   (fun ?abort ?(base = 1) _ ->
     let _ = abort in
     let _ = base in
     Ppx_platform.fail_melange_only "optional_args")
@@ -108,7 +108,7 @@
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun (type a) x y ->
+   (fun x y ->
     let _ = x in
     let _ = y in
     Ppx_platform.fail_melange_only "newtype")
@@ -180,7 +180,7 @@ The native output keeps every parameter in its inferred type
   $ ocamlc -c ppx_platform.ml
   $ ocamlc -i -alert -melange_only native.ml
   val two_args : 'a -> 'b -> 'c
-  val optional_args : ?abort:'a -> ?base:'b -> unit -> 'c
+  val optional_args : ?abort:'a -> ?base:int -> 'b -> 'c
   val labelled_args : first:'a -> second:'b -> 'c
   val constrained : 'a -> 'b -> 'c
   val newtype : 'a -> 'b -> 'c

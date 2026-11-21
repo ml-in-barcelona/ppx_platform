@@ -35,7 +35,7 @@ Wrong case names or count are errors
   let c =
     [%ocaml.error "[ppx_platform] switch%platform requires a match expression"]
 
-Attributes on items, fields and types
+Attributes on items, fields and types. The attribute goes away from what the ppx keeps
 
   $ cat > attrs.ml << EOF
   > include struct type t = Js.Json.t end [@@melange_only]
@@ -52,34 +52,32 @@ Attributes on items, fields and types
   $ ./standalone.exe -impl attrs.ml -js | ocamlformat - --enable-outside-detected-project --impl
   include struct
     type t = Js.Json.t
-  end [@@melange_only]
+  end
   
   module M = struct
     let x = 1
   end
-  [@@melange_only]
   
-  type r = { always : int; js : int [@melange_only] }
-  type v = A | B [@melange_only]
+  type r = { always : int; js : int }
+  type v = A | B
   
-  let melange () = 1 [@@melange_only]
+  let melange () = 1
   
-  external e : int -> int = "e" [@@melange_only]
+  external e : int -> int = "e"
 
   $ ./standalone.exe -impl attrs.ml | ocamlformat - --enable-outside-detected-project --impl
   include struct
     type t = Yojson.Basic.t
-  end [@@native_only]
+  end
   
   module N = struct
     let x = 2
   end
-  [@@native_only]
   
-  type r = { always : int; nat : int [@native_only] }
-  type v = A | C [@native_only]
+  type r = { always : int; nat : int }
+  type v = A | C
   
-  let native () = 2 [@@native_only]
+  let native () = 2
 
   $ cat > attrs.mli << EOF
   > val a : int [@@melange_only]
@@ -88,14 +86,14 @@ Attributes on items, fields and types
   > EOF
 
   $ ./standalone.exe -intf attrs.mli -js | ocamlformat - --enable-outside-detected-project --intf
-  val a : int [@@melange_only]
+  val a : int
   
-  type t = { x : int [@melange_only] }
+  type t = { x : int }
 
   $ ./standalone.exe -intf attrs.mli | ocamlformat - --enable-outside-detected-project --intf
-  val b : int [@@native_only]
+  val b : int
   
-  type t = { y : int [@native_only] }
+  type t = { y : int }
 
 On expressions, the attribute of the target that drops it is an error
 
@@ -109,10 +107,10 @@ On expressions, the attribute of the target that drops it is an error
     [%ocaml.error
       "Don't use melange_only on expressions, use switch%platform instead"]
   
-  let b = (1 [@native_only])
+  let b = 1
 
   $ ./standalone.exe -impl attr_expr.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  let a = (1 [@melange_only])
+  let a = 1
   
   let b =
     [%ocaml.error
@@ -154,7 +152,7 @@ let%melange_only and [%melange_only ...]
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?a b ->
+   (fun ?(a = 1) b ->
     let _ = a in
     let _ = b in
     Ppx_platform.fail_melange_only "g")
@@ -166,7 +164,7 @@ let%melange_only and [%melange_only ...]
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-    Obj.magic () [@alert "-melange_only"]
+   (fun _ -> Ppx_platform.fail_melange_only "h") [@alert "-melange_only"]
   [@@warning "-32"]
   
   let on_click event =

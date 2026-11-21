@@ -25,7 +25,7 @@ With -js flag everything keeps as it is and melange_only extension disappears
     in
     ()
 
-Without -js flag, the compilation to native errors out indicating that a function must be used
+Without -js flag, `function` cases become a stub that takes one argument and raises, at the top level and in a local binding
 
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl
   let (foo
@@ -37,10 +37,5 @@ Without -js flag, the compilation to native errors out indicating that a functio
   [@@warning "-32"]
   
   let make () =
-    let foo =
-      [%ocaml.error
-        "[ppx_platform] melange_only works on function definitions. For other \
-         cases, use switch%platform or feel free to open an issue in \
-         https://github.com/ml-in-barcelona/ppx_platform."]
-    in
+    let foo _ = Ppx_platform.fail_melange_only "foo" [@@alert "-melange_only"] in
     ()

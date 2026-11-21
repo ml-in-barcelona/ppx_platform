@@ -86,38 +86,52 @@ With -js the extension goes away and the code stays as written:
   let bracket x = x + 1
   let rec bracket_rec n = if n > 0 then bracket_rec (n - 1)
 
-2. [%%melange_only ...] supports only value bindings. Any other structure item
-stays an uninterpreted extension, in both modes:
+2. [%%melange_only ...] supports one let binding. Any other payload is a ppx
+error at the item, in both modes:
 
   $ for item in 'type t = int' 'module M = struct end' 'external f : int -> int = "%identity"' 'open List' 'exception E' 'print_endline "x"' 'let x = 1 let y = 2'; do
   >   echo "$item"
   >   printf '[%%%%melange_only %s]\n' "$item" > unsupported.ml
   >   ./standalone.exe -impl unsupported.ml > unsupported_native.ml
   >   ./standalone.exe -impl unsupported.ml -js > unsupported_js.ml
-  >   ocamlc -c unsupported_native.ml 2>&1 | grep Error
-  >   ocamlc -c unsupported_js.ml 2>&1 | grep Error
+  >   ocamlc -c unsupported_native.ml 2>&1 | grep -A 1 Error
+  >   ocamlc -c unsupported_js.ml 2>&1 | grep -A 1 Error
   > done
   type t = int
-  Error: Uninterpreted extension 'melange_only'.
-  Error: Uninterpreted extension 'melange_only'.
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
   module M = struct end
-  Error: Uninterpreted extension 'melange_only'.
-  Error: Uninterpreted extension 'melange_only'.
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
   external f : int -> int = "%identity"
-  Error: Uninterpreted extension 'melange_only'.
-  Error: Uninterpreted extension 'melange_only'.
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
   open List
-  Error: Uninterpreted extension 'melange_only'.
-  Error: Uninterpreted extension 'melange_only'.
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
   exception E
-  Error: Uninterpreted extension 'melange_only'.
-  Error: Uninterpreted extension 'melange_only'.
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
   print_endline "x"
-  Error: Uninterpreted extension 'melange_only'.
-  Error: Uninterpreted extension 'melange_only'.
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
   let x = 1 let y = 2
-  Error: Uninterpreted extension 'melange_only'.
-  Error: Uninterpreted extension 'melange_only'.
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
+  Error: [ppx_platform] [%%melange_only ...] supports one let binding. For
+         other structure items, use [@@melange_only].
 
 3. [@@melange_only] and [@@native_only] on every kind of structure item. The
 Native and the Melange output export different items, so one .mli cannot
@@ -156,33 +170,33 @@ match both; these files compile without an .mli, with warning 70
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only -I native native/items.ml
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only -I js js/items.ml
 
-Native keeps the [@@native_only] items. A let%melange_only binding with
-[@@melange_only] becomes a stub instead of going away:
+Native keeps the [@@native_only] items and removes the attribute. A
+let%melange_only binding with [@@melange_only] becomes a stub instead of going
+away:
 
   $ cat native/items.ml
-  let v_native = 1 [@@native_only]
-  let v_native_prefix = 1 [@@native_only]
+  let v_native = 1
+  let v_native_prefix = 1
   
-  type t_native = int [@@native_only]
+  type t_native = int
   type ext = ..
-  type ext += Ext_native [@@native_only]
+  type ext += Ext_native
   
   module M_native = struct
     let v = 1
   end
-  [@@native_only]
   
-  module type S_native = sig end [@@native_only]
+  module type S_native = sig end
   
-  external e_native : int -> int = "%identity" [@@native_only]
+  external e_native : int -> int = "%identity"
   
   include struct
     let inc_native = 3
-  end [@@native_only]
+  end
   
-  exception E_native [@@native_only]
+  exception E_native
   
-  class c_native = object end [@@native_only]
+  class c_native = object end
   
   let (stub_and_attr
        [@alert
@@ -195,36 +209,64 @@ Native keeps the [@@native_only] items. A let%melange_only binding with
     [@alert "-melange_only"]
   [@@warning "-32"]
 
+The Melange output also removes the attribute from the items it keeps:
+
   $ cat js/items.ml
-  let v_melange = 2 [@@melange_only]
-  let v_melange_prefix = 2 [@@melange_only]
+  let v_melange = 2
+  let v_melange_prefix = 2
   
-  type t_melange = string [@@melange_only]
+  type t_melange = string
   type ext = ..
-  type ext += Ext_melange [@@melange_only]
+  type ext += Ext_melange
   
   module M_melange = struct
     let v = 2
   end
-  [@@melange_only]
   
-  module type S_melange = sig end [@@melange_only]
+  module type S_melange = sig end
   
-  external e_melange : int -> int = "%identity" [@@melange_only]
+  external e_melange : int -> int = "%identity"
   
-  open Stdlib.List [@@melange_only]
+  open Stdlib.List
   
-  let uses_open = length [] [@@melange_only]
+  let uses_open = length []
   
   include struct
     let inc_melange = 4
-  end [@@melange_only]
+  end
   
-  exception E_melange [@@melange_only]
+  exception E_melange
   
-  class c_melange = object end [@@melange_only]
+  class c_melange = object end
   
-  let stub_and_attr x = x [@@melange_only]
+  let stub_and_attr x = x
+
+A platform attribute in a position that the ppx does not evaluate is an error
+in both modes, so the code it marks cannot stay in the wrong build: a class
+field, an extension constructor, an inline record field, a type expression, and
+one binding of a local `let ... and ...`:
+
+  $ for item in 'class c = object method b = 1 [@@melange_only] end' 'type ext = .. type ext += B of int [@melange_only]' 'type v = A of { x : int [@melange_only] }' 'let y : (int [@melange_only]) = 1' 'let both () = let a = 1 [@@melange_only] and b = 2 in a + b'; do
+  >   echo "$item"
+  >   echo "$item" > unsupported_attr.ml
+  >   ./standalone.exe -impl unsupported_attr.ml 2>&1 | grep -A 2 Error
+  >   ./standalone.exe -impl unsupported_attr.ml -js 2>&1 | grep -A 2 Error
+  > done
+  class c = object method b = 1 [@@melange_only] end
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  type ext = .. type ext += B of int [@melange_only]
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  type v = A of { x : int [@melange_only] }
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  let y : (int [@melange_only]) = 1
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  let both () = let a = 1 [@@melange_only] and b = 2 in a + b
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
+  Error: [ppx_platform] [@melange_only] is not supported here. Use it on a structure or signature item, a constructor or record field of a type definition, a polymorphic variant tag, a pattern or an expression.
 
 A floating [@@@melange_only] or [@@@native_only] as the first item of a file
 or a struct keeps or drops the whole rest of it:
@@ -258,6 +300,36 @@ or a struct keeps or drops the whole rest of it:
   0
   $ ./standalone.exe -impl floating_file.ml -js
   let x = 1
+
+A floating [@@@melange_only] or [@@@native_only] after the first item is a ppx
+error at the attribute:
+
+  $ cat > floating_mid.ml << 'EOF'
+  > module Mid = struct
+  >   let before = 0
+  >   [@@@melange_only]
+  >   let after = 1
+  > end
+  > EOF
+  $ ./standalone.exe -impl floating_mid.ml | ocamlformat - --enable-outside-detected-project --impl
+  module Mid = struct
+    let before = 0
+  
+    [%%ocaml.error
+    "[ppx_platform] [@@@melange_only] works only as the first item of a \
+     structure or a signature"]
+  
+    let after = 1
+  end
+  $ ./standalone.exe -impl floating_mid.ml > floating_mid_native.ml
+  $ ocamlc -c floating_mid_native.ml 2>&1 | grep -A 1 Error
+  Error: [ppx_platform] [@@@melange_only] works only as the first item of a
+         structure or a signature
+  $ printf 'val before : int\n[@@@native_only]\nval after : int\n' > floating_mid.mli
+  $ ./standalone.exe -intf floating_mid.mli -js > floating_mid_js.mli
+  $ ocamlc -c floating_mid_js.mli 2>&1 | grep -A 1 Error
+  Error: [ppx_platform] [@@@native_only] works only as the first item of a
+         structure or a signature
 
 4. let%melange_only and match%platform inside modules: struct, nested struct,
 a struct with a module type constraint, a functor body, an applied functor,
@@ -467,14 +539,15 @@ here interprets [%%private], so this shows the output only:
   [%%private let helper x = x + 1]
   [%%private let platform_value = 2]
 
-Known issues
+A [%%private ...] whose items all go away goes away too:
 
-These cases record the current, wrong result.
+  $ cat > private_empty.ml << 'EOF'
+  > [%%private let dropped = 1 [@@melange_only]]
+  > EOF
+  $ ./standalone.exe -impl private_empty.ml | ocamlformat - --enable-outside-detected-project --impl
 
-A. A top-level let%melange_only whose right-hand side is not a function or a
-plain name stays unchanged on Native: no stub, no alert, no error. The Melange
-code runs in the Native build. Expected: an error, as for the local form, or a
-stub.
+7. A let%melange_only whose right-hand side is not a function or a name is an
+error on Native, as for the local form:
 
   $ cat > non_function.ml << 'EOF'
   > let%melange_only const = 1
@@ -482,60 +555,46 @@ stub.
   > [%%melange_only let bracket_applied = print_endline "runs on native"]
   > EOF
   $ ./standalone.exe -impl non_function.ml | ocamlformat - --enable-outside-detected-project --impl
-  let const = 1
-  let applied = print_endline "runs on native"
-  let bracket_applied = print_endline "runs on native"
+  let const =
+    [%ocaml.error
+      "[ppx_platform] melange_only works on function definitions. For other \
+       cases, use switch%platform or feel free to open an issue in \
+       https://github.com/ml-in-barcelona/ppx_platform."]
+  
+  let applied =
+    [%ocaml.error
+      "[ppx_platform] melange_only works on function definitions. For other \
+       cases, use switch%platform or feel free to open an issue in \
+       https://github.com/ml-in-barcelona/ppx_platform."]
+  
+  let bracket_applied =
+    [%ocaml.error
+      "[ppx_platform] melange_only works on function definitions. For other \
+       cases, use switch%platform or feel free to open an issue in \
+       https://github.com/ml-in-barcelona/ppx_platform."]
 
-B. On Native the stub drops the type annotations, so the Native output has a
-more general type than the Melange output. An .mli hides this (section 1);
-without one the inferred interfaces differ:
+A unit binding has nothing to stub: on Native its right-hand side becomes
+`()`, as for the local form.
 
-  $ ocamlc -i -I native native/top.ml | grep 'two\|annotated'
-  val two : 'a -> 'b -> 'c
-  val annotated : 'a -> 'b
-  val annotated_params : 'a -> 'b
-  $ ocamlc -i -I js js/top.ml | grep 'two\|annotated'
-  val two : int -> int -> int
-  val annotated : int -> int
-  val annotated_params : int -> int
+  $ printf 'let%%melange_only () = print_endline "runs on melange"\n' > unit_binding.ml
+  $ ./standalone.exe -impl unit_binding.ml | ocamlformat - --enable-outside-detected-project --impl
+  let () = ()
 
-C. On Native the stub drops the item attributes of the binding, such as
-[@@inline never] or [@@deprecated]. Native callers get no deprecation alert:
+8. The Native stub keeps the item attributes of the binding, such as
+[@@inline never] or [@@deprecated], after its own [@@warning "-32"]. Native
+callers get the deprecation alert:
 
-  $ grep -c 'inline' native/top.ml
-  0
-  [1]
+  $ grep -n 'inline' native/top.ml
+  82:[@@warning "-32"] [@@inline never]
   $ cat > deprecated.ml << 'EOF'
   > let%melange_only old x = x [@@deprecated "use new"]
   > EOF
   $ ./standalone.exe -impl deprecated.ml | ocamlformat - --enable-outside-detected-project --impl | grep -c deprecated
-  0
-  [1]
+  1
 
-D. A floating [@@@melange_only] that is not the first item of a struct is
-ignored without an error. Native keeps `after`:
-
-  $ cat > floating_mid.ml << 'EOF'
-  > module Mid = struct
-  >   let before = 0
-  >   [@@@melange_only]
-  >   let after = 1
-  > end
-  > EOF
-  $ ./standalone.exe -impl floating_mid.ml | ocamlformat - --enable-outside-detected-project --impl
-  module Mid = struct
-    let before = 0
-  
-    [@@@melange_only]
-  
-    let after = 1
-  end
-
-E. A parameter of a function that only discarded code inside a `let module`
-uses gets no ignore, because locals are not tracked into a module body.
-Expected: `let _ = x` in the stub of `l` and before `0` in `v`. Actual: warning
-27 for both parameters (warning 60 for the local module is the accepted cost
-from section 5).
+9. Inside a `let module` body, a parameter of the enclosing function that only
+discarded code uses gets an ignore: in the stub of `l` and before `0` in `v`.
+Warning 60 for the unused local module is the accepted cost from section 5.
 
   $ cat > local_module.mli << 'EOF'
   > val melange_only_in_local_module : int -> int
@@ -558,32 +617,32 @@ from section 5).
   $ ./standalone.exe -impl local_module.ml -js | ocamlformat - --enable-outside-detected-project --impl > js/local_module.ml
   $ cp local_module.mli native/
   $ cp local_module.mli js/
-  $ grep -c 'let _ = ' native/local_module.ml
-  1
+  $ grep -n 'let _ = ' native/local_module.ml
+  10:      let _ = x in
+  11:      let _ = y in
+  21:      let _ = x in
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only native/local_module.mli
   $ ocamlc -c -w +A -alert @melange_only -I native native/local_module.ml
-  File "native/local_module.ml", line 1, characters 33-34:
-  1 | let melange_only_in_local_module x =
-                                       ^
-  Warning 27 [unused-var-strict]: unused variable x.
-  
   File "native/local_module.ml", line 2, characters 13-14:
   2 |   let module L = struct
                    ^
   Warning 60 [unused-module]: unused module L.
-  
-  File "native/local_module.ml", line 17, characters 26-27:
-  17 | let match_in_local_module x =
-                                 ^
-  Warning 27 [unused-var-strict]: unused variable x.
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only js/local_module.mli
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I js js/local_module.ml
 
-F. A [@@melange_only] item that is the only item of [%%private ...] leaves an
-empty [%%private] on Native. Expected: the whole item goes away.
+Known issues
 
-  $ cat > private_empty.ml << 'EOF'
-  > [%%private let dropped = 1 [@@melange_only]]
-  > EOF
-  $ ./standalone.exe -impl private_empty.ml | ocamlformat - --enable-outside-detected-project --impl
-  [%%private]
+This case records the current, wrong result.
+
+A. On Native the stub drops the type annotations, so the Native output has a
+more general type than the Melange output. An .mli hides this (section 1);
+without one the inferred interfaces differ:
+
+  $ ocamlc -i -I native native/top.ml | grep 'two\|annotated'
+  val two : 'a -> 'b -> 'c
+  val annotated : 'a -> 'b
+  val annotated_params : 'a -> 'b
+  $ ocamlc -i -I js js/top.ml | grep 'two\|annotated'
+  val two : int -> int -> int
+  val annotated : int -> int
+  val annotated_params : int -> int

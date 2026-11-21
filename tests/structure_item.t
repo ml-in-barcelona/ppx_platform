@@ -64,7 +64,7 @@ With -js flag everything keeps as it is and melange_only extension disappears
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-    Obj.magic () [@alert "-melange_only"]
+   (fun _ -> Ppx_platform.fail_melange_only "pexp_ident") [@alert "-melange_only"]
   [@@warning "-32"]
   
   let (pexp_fun_1arg_structure_item

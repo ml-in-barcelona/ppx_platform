@@ -126,14 +126,14 @@ Verify selected generated expansions:
   $ grep -A 5 "let use_state_example" supported.ml
   let use_state_example () =
     let a, set_a = use_state 4 in
-    use_effect (fun () ->
+    use_effect (fun _ ->
         let _ = set_a in
-        Ppx_platform.fail_melange_only "<unkwnown>");
+        Ppx_platform.fail_melange_only "<unknown>");
     a
 
   $ grep -A 6 "let use_shadowed_default" supported.ml
   let use_shadowed_default x =
-    let f ?x:_ () =
+    let f ?x:_ _ =
       let _ = x in
       Ppx_platform.fail_melange_only "f"
         [@@alert "-melange_only"]
@@ -300,8 +300,8 @@ discarded code still warn on native.
   $ ./standalone.exe -impl not_local_input.ml | ocamlformat - --enable-outside-detected-project --impl > not_local.ml
   $ grep -n "let _ = \|let module _" not_local.ml
   13:  let _ = x in
-  37:  let _ = base in
-  106:    let _ = v in
+  39:  let _ = base in
+  108:    let _ = v in
   $ ocamlc -c -w +A -alert @melange_only not_local.mli
   $ ocamlc -c -w +A -alert @melange_only -I . not_local.ml
   File "not_local.ml", line 1, characters 4-14:
@@ -329,73 +329,73 @@ discarded code still warn on native.
            ^^^^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value ident_target.
   
-  File "not_local.ml", line 29, characters 4-16:
-  29 | let default_base = "https://example.com"
+  File "not_local.ml", line 31, characters 4-16:
+  31 | let default_base = "https://example.com"
            ^^^^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value default_base.
   
-  File "not_local.ml", line 43, characters 6-25:
-  43 |   let from_inline_include = 1
+  File "not_local.ml", line 45, characters 6-25:
+  45 |   let from_inline_include = 1
              ^^^^^^^^^^^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value from_inline_include.
   
-  File "not_local.ml", line 47, characters 6-22:
-  47 |   let from_inline_open = 3
+  File "not_local.ml", line 49, characters 6-22:
+  49 |   let from_inline_open = 3
              ^^^^^^^^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value from_inline_open.
   
-  File "not_local.ml", line 55, characters 6-39:
-  55 |       val from_inline_sig_include : int
+  File "not_local.ml", line 57, characters 6-39:
+  57 |       val from_inline_sig_include : int
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value from_inline_sig_include.
   
-  File "not_local.ml", line 69, characters 6-12:
-  69 |   let member = 10
+  File "not_local.ml", line 71, characters 6-12:
+  71 |   let member = 10
              ^^^^^^
   Warning 32 [unused-value-declaration]: unused value member.
   
-  File "not_local.ml", line 72, characters 0-33:
-  72 | module Local_alias = Local_struct
+  File "not_local.ml", line 74, characters 0-33:
+  74 | module Local_alias = Local_struct
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Warning 60 [unused-module]: unused module Local_alias.
   
-  File "not_local.ml", line 75, characters 6-23:
-  75 |   let from_opened_local = 30
+  File "not_local.ml", line 77, characters 6-23:
+  77 |   let from_opened_local = 30
              ^^^^^^^^^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value from_opened_local.
   
-  File "not_local.ml", line 78, characters 0-17:
-  78 | open Opened_local
+  File "not_local.ml", line 80, characters 0-17:
+  80 | open Opened_local
        ^^^^^^^^^^^^^^^^^
   Warning 33 [unused-open]: unused open Opened_local.
   
-  File "not_local.ml", line 81, characters 6-25:
-  81 |   let from_included_local = 40
+  File "not_local.ml", line 83, characters 6-25:
+  83 |   let from_included_local = 40
              ^^^^^^^^^^^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value from_included_local.
   
-  File "not_local.ml", line 86, characters 30-38:
-  86 | let use_local_modules (module Unpacked : Set.S) =
+  File "not_local.ml", line 88, characters 30-38:
+  88 | let use_local_modules (module Unpacked : Set.S) =
                                      ^^^^^^^^
   Warning 60 [unused-module]: unused module Unpacked.
   
-  File "not_local.ml", line 88, characters 8-17:
-  88 |     let local_val = 60
+  File "not_local.ml", line 90, characters 8-17:
+  90 |     let local_val = 60
                ^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value local_val.
   
-  File "not_local.ml", line 87, characters 13-24:
-  87 |   let module Local_in_fn = struct
+  File "not_local.ml", line 89, characters 13-24:
+  89 |   let module Local_in_fn = struct
                     ^^^^^^^^^^^
   Warning 60 [unused-module]: unused module Local_in_fn.
   
-  File "not_local.ml", line 96, characters 2-20:
-  96 |   val go : t -> unit
+  File "not_local.ml", line 98, characters 2-20:
+  98 |   val go : t -> unit
          ^^^^^^^^^^^^^^^^^^
   Warning 32 [unused-value-declaration]: unused value go.
   
-  File "not_local.ml", line 93, characters 20-23:
-  93 | module Use_functor (Arg : sig
+  File "not_local.ml", line 95, characters 20-23:
+  95 | module Use_functor (Arg : sig
                            ^^^
   Warning 60 [unused-module]: unused module Arg.
 
@@ -426,7 +426,7 @@ Bindings wrapped in `[%%private ...]` are top-level values, so they get no ignor
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun () ->
+   (fun _ ->
     Ppx_platform.fail_melange_only "private_helper")
     [@alert "-melange_only"]
   [@@warning "-32"]]
@@ -437,5 +437,5 @@ Bindings wrapped in `[%%private ...]` are top-level values, so they get no ignor
     let visible = 2
   end
   
-  let use_priv () = Ppx_platform.fail_melange_only "<unkwnown>"
-  let use_hidden_mod () = Ppx_platform.fail_melange_only "<unkwnown>"
+  let use_priv _ = Ppx_platform.fail_melange_only "<unknown>"
+  let use_hidden_mod _ = Ppx_platform.fail_melange_only "<unknown>"

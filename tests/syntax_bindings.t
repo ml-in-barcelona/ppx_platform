@@ -198,7 +198,7 @@ and a top-level let%melange_only rec ... and ...
     a + c
   
   let mel_only_local x y =
-    let f () =
+    let f _ =
       let _ = x in
       let _ = y in
       Ppx_platform.fail_melange_only "f"
@@ -208,11 +208,11 @@ and a top-level let%melange_only rec ... and ...
     y
   
   let mel_only_and x y =
-    let f () =
+    let f _ =
       let _ = x in
       Ppx_platform.fail_melange_only "f"
     [@@alert "-melange_only"]
-    and g () =
+    and g _ =
       let _ = y in
       Ppx_platform.fail_melange_only "g"
         [@@alert "-melange_only"]
@@ -234,10 +234,10 @@ and a top-level let%melange_only rec ... and ...
     0
   
   let mel_only_fun x y =
-    let h () =
+    let h _ =
       let _ = x in
       let _ = y in
-      Ppx_platform.fail_melange_only "<unkwnown>"
+      Ppx_platform.fail_melange_only "<unknown>"
     in
     ignore h;
     y
@@ -452,16 +452,16 @@ is harmless.
     l1
   
   let p_mel_only_fun { a; b; _ } =
-    let h () =
+    let h _ =
       let _ = a in
       let _ = b in
-      Ppx_platform.fail_melange_only "<unkwnown>"
+      Ppx_platform.fail_melange_only "<unknown>"
     in
     ignore h;
     a
   
   let p_mel_only_let (lazy lz) (q1, q2) =
-    let f () =
+    let f _ =
       let _ = lz in
       let _ = q1 in
       let _ = q2 in
@@ -788,20 +788,14 @@ cost.
   Warning 60 [unused-module]: unused module U.
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only -I . modules_js.ml
 
-Known issues
+6. The initializer of an object `val x = x` reads the outer `x`, so that `x`,
+used only in the Melange branch, gets an ignore. A name that an
+`open struct ... end` binds is not a local: the Melange branch of
+open_struct_shadows_local reads the `x` of the struct, so no ignore names it.
+The outer `x` is unused on both targets and warns 27; on native the `x` of the
+struct is unused too and warns 32.
 
-The output below records the current, wrong result.
-
-object_val: the initializer of `val x = x` reads the outer `x`, which is used
-only in the Melange branch. Expected `let _ = x in 0`. Actual: no ignore, so
-native fails with warning 27 under -warn-error +A.
-
-open_struct_shadows_local: the Melange branch reads the `x` of the
-open struct, not the outer `x`. Expected no ignore (a name from an open).
-Actual: `let _ = x` is emitted inside the open, so it names the open's `x`.
-The output compiles, and the unused outer `x` still warns 27 on both targets.
-
-  $ cat > known_input.ml << 'EOF'
+  $ cat > val_open_input.ml << 'EOF'
   > let object_val x =
   >   match%platform () with
   >   | Native -> 0
@@ -818,30 +812,31 @@ The output compiles, and the unused outer `x` still warns 27 on both targets.
   >   match%platform () with Native -> 0 | Melange -> x
   > EOF
 
-  $ ./standalone.exe -impl known_input.ml | ocamlformat - --enable-outside-detected-project --impl > known_native.ml
-  $ ./standalone.exe -impl known_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > known_js.ml
-  $ cat known_native.ml
-  let object_val x = 0
+  $ ./standalone.exe -impl val_open_input.ml | ocamlformat - --enable-outside-detected-project --impl > val_open_native.ml
+  $ ./standalone.exe -impl val_open_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > val_open_js.ml
+  $ cat val_open_native.ml
+  let object_val x =
+    let _ = x in
+    0
   
   let open_struct_shadows_local x =
     let open struct
       let x = 2
     end in
-    let _ = x in
     0
-  $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only -I . known_native.ml
-  File "known_native.ml", line 1, characters 15-16:
-  1 | let object_val x = 0
-                     ^
-  Error (warning 27 [unused-var-strict]): unused variable x.
-  
-  File "known_native.ml", line 3, characters 30-31:
-  3 | let open_struct_shadows_local x =
+  $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only -I . val_open_native.ml
+  File "val_open_native.ml", line 5, characters 30-31:
+  5 | let open_struct_shadows_local x =
                                     ^
   Error (warning 27 [unused-var-strict]): unused variable x.
+  
+  File "val_open_native.ml", line 7, characters 8-9:
+  7 |     let x = 2
+              ^
+  Error (warning 32 [unused-value-declaration]): unused value x.
   [2]
-  $ ocamlc -c -w +A-70 -alert -melange_only -I . known_js.ml
-  File "known_js.ml", line 8, characters 30-31:
+  $ ocamlc -c -w +A-70 -alert -melange_only -I . val_open_js.ml
+  File "val_open_js.ml", line 8, characters 30-31:
   8 | let open_struct_shadows_local x =
                                     ^
   Warning 27 [unused-var-strict]: unused variable x.

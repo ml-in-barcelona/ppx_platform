@@ -100,7 +100,7 @@
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun ?id component ->
+   (fun ?(id = "") component ->
     let _ = component in
     let _ = id in
     Ppx_platform.fail_melange_only "renderToElementWithId")

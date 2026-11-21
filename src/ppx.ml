@@ -51,15 +51,12 @@ module Platform = struct
     | _ -> Error (switch_platform_requires_a_match ~loc)
 end
 
-let remove_type_constraint pattern =
-  match pattern with
-  | { ppat_desc = Ppat_constraint ({ ppat_desc = Ppat_unpack _; _ }, _) | Ppat_unpack _; _ } ->
-      { pattern with ppat_desc = Ppat_any }
-  | { ppat_desc = Ppat_constraint (pattern, _); _ } -> pattern
-  | _ -> pattern
+let error_extension ~loc message =
+  ({ txt = "ocaml.error"; loc }, PStr [ Builder.pstr_eval ~loc (Builder.estring ~loc message) [] ])
 
 module Melange_only = struct
-  let get_function_name pattern = match pattern with Ppat_var { txt = name; _ } -> name | _ -> "<unkwnown>"
+  let unknown_name = "<unknown>"
+  let function_name pattern = match pattern.ppat_desc with Ppat_var { txt = name; _ } -> name | _ -> unknown_name
 
   let error_only_works_on ~loc =
     [%expr
@@ -67,24 +64,43 @@ module Melange_only = struct
         "[ppx_platform] melange_only works on function definitions. For other cases, use switch%platform or feel free \
          to open an issue in https://github.com/ml-in-barcelona/ppx_platform."]]
 
+  let unsupported_structure_item ~loc =
+    Builder.pstr_extension ~loc
+      (error_extension ~loc
+         "[ppx_platform] [%%melange_only ...] supports one let binding. For other structure items, use \
+          [@@melange_only].")
+      []
+
   let remove_alert_only ~loc =
     Builder.attribute ~loc ~name:{ txt = "alert"; loc }
       ~payload:(PStr [ Builder.pstr_eval ~loc (Builder.estring ~loc ("-" ^ melange_only)) [] ])
 
-  let prepare_param_pattern ~outer_refs pat =
-    let pat = Scope.wildcard_shadowed_pattern ~shadowed:outer_refs (remove_type_constraint pat) in
-    (pat, Scope.pattern_bindings pat)
+  let is_literal expr =
+    match expr.pexp_desc with
+    | Pexp_constant _ | Pexp_construct ({ txt = Lident ("true" | "false" | "()"); _ }, None) | Pexp_variant (_, None) ->
+        true
+    | _ -> false
 
-  let prepare_params ~outer_refs ~kept_bindings params =
-    List.fold_left_map
-      (fun kept_bindings param ->
-        match param.pparam_desc with
-        | Pparam_val (arg_label, _default, pattern) ->
-            let pattern, bindings = prepare_param_pattern ~outer_refs pattern in
-            ( Scope.String_set.union kept_bindings bindings,
-              { param with pparam_desc = Pparam_val (arg_label, None, pattern) } )
-        | Pparam_newtype _ -> (kept_bindings, param))
-      kept_bindings params
+  let rec plain_variable pattern =
+    match pattern.ppat_desc with
+    | Ppat_var name -> Some name
+    | Ppat_constraint (pattern, _) -> plain_variable pattern
+    | _ -> None
+
+  let any_param ~loc = { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, Builder.ppat_any ~loc) }
+
+  let stub_param ~outer_refs param =
+    match param.pparam_desc with
+    | Pparam_newtype _ -> None
+    | Pparam_val (label, default, pattern) ->
+        let default = match default with Some expr when is_literal expr -> default | _ -> None in
+        let loc = pattern.ppat_loc in
+        let pattern =
+          match plain_variable pattern with
+          | Some name when not (Scope.String_set.mem name.txt outer_refs) -> Builder.ppat_var ~loc name
+          | _ -> Builder.ppat_any ~loc
+        in
+        Some { param with pparam_desc = Pparam_val (label, default, pattern) }
 
   let wrap_with_ignores ~loc ~kept_bindings ~outer_refs body =
     List.fold_right
@@ -95,143 +111,150 @@ module Melange_only = struct
       (Scope.String_set.elements (Scope.String_set.union kept_bindings outer_refs))
       body
 
-  let rec last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_name expr =
-    let raise_melange_only kept_bindings =
-      wrap_with_ignores ~loc ~kept_bindings ~outer_refs
-        [%expr Ppx_platform.fail_melange_only [%e Builder.estring ~loc original_name]]
-    in
+  let rec is_function expr =
     match expr.pexp_desc with
-    | Pexp_constraint (expr, _) -> last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_name expr
-    | Pexp_function (params, _, body) ->
-        let kept_bindings, params = prepare_params ~outer_refs ~kept_bindings params in
+    | Pexp_function (params, _, body) -> (
+        List.exists
+          (fun param -> match param.pparam_desc with Pparam_val _ -> true | Pparam_newtype _ -> false)
+          params
+        || match body with Pfunction_cases _ -> true | Pfunction_body body -> is_function body)
+    | Pexp_constraint (expr, _) | Pexp_coerce (expr, _, _) | Pexp_newtype (_, expr) -> is_function expr
+    | _ -> false
+
+  let fail ~loc ~outer_refs ~kept_bindings name =
+    wrap_with_ignores ~loc ~kept_bindings ~outer_refs
+      [%expr Ppx_platform.fail_melange_only [%e Builder.estring ~loc name]]
+
+  let rec stub_body ~loc ~outer_refs ~kept_bindings name expr =
+    match expr.pexp_desc with
+    | Pexp_constraint (expr, _) | Pexp_coerce (expr, _, _) | Pexp_newtype (_, expr) ->
+        stub_body ~loc ~outer_refs ~kept_bindings name expr
+    | Pexp_function (params, _, body) -> (
+        let params = List.filter_map (stub_param ~outer_refs) params in
+        let kept_bindings =
+          List.fold_left
+            (fun acc param ->
+              match param.pparam_desc with Pparam_val (_, _, pattern) -> Scope.add_pattern pattern acc | _ -> acc)
+            kept_bindings params
+        in
         let params, body =
           match body with
-          | Pfunction_body body ->
-              (params, last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings original_name body)
-          | Pfunction_cases _ ->
-              ( params @ [ { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, [%pat? _]) } ],
-                raise_melange_only kept_bindings )
+          | Pfunction_body body -> (params, stub_body ~loc ~outer_refs ~kept_bindings name body)
+          | Pfunction_cases _ -> (params @ [ any_param ~loc ], fail ~loc ~outer_refs ~kept_bindings name)
         in
-        let fn =
-          match body with
-          | { pexp_desc = Pexp_function (more_params, None, body); pexp_attributes = []; _ } ->
-              Builder.pexp_function ~loc (params @ more_params) None body
-          | _ -> Builder.pexp_function ~loc params None (Pfunction_body body)
-        in
-        { fn with pexp_attributes = expr.pexp_attributes }
-    | _ -> raise_melange_only kept_bindings
+        match (params, body) with
+        | [], body -> body
+        | params, { pexp_desc = Pexp_function (more_params, None, body); pexp_attributes = []; _ } ->
+            {
+              (Builder.pexp_function ~loc (params @ more_params) None body) with
+              pexp_attributes = expr.pexp_attributes;
+            }
+        | params, body ->
+            {
+              (Builder.pexp_function ~loc params None (Pfunction_body body)) with
+              pexp_attributes = expr.pexp_attributes;
+            })
+    | _ -> fail ~loc ~outer_refs ~kept_bindings name
 
-  let melange_only_fun ~loc ~outer_refs params expression =
-    let stringified = Ppxlib.Pprintast.string_of_expression expression in
-    let message = Builder.estring ~loc stringified in
-    let kept_bindings, params = prepare_params ~outer_refs ~kept_bindings:Scope.String_set.empty params in
-    let body = wrap_with_ignores ~loc ~kept_bindings ~outer_refs [%expr Ppx_platform.fail_melange_only [%e message]] in
-    let fn = Builder.pexp_function ~loc params None (Pfunction_body body) in
-    { fn with pexp_attributes = expression.pexp_attributes }
+  let rec stub ~loc ~outer_refs name expr =
+    match expr.pexp_desc with
+    | Pexp_constraint (expr, _) | Pexp_coerce (expr, _, _) -> stub ~loc ~outer_refs name expr
+    | Pexp_ident _ ->
+        Some
+          (Builder.pexp_function ~loc
+             [ any_param ~loc ]
+             None
+             (Pfunction_body (fail ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty name)))
+    | _ when is_function expr -> Some (stub_body ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty name expr)
+    | _ -> None
 
-  let melange_only_value_binding ~locals pattern expression =
-    let loc = pattern.ppat_loc in
-    match pattern with
-    | [%pat? ()] ->
-        let outer_refs = Scope.collect_free_in_expr ~outer:locals expression in
-        let expr = wrap_with_ignores ~loc ~kept_bindings:Scope.String_set.empty ~outer_refs [%expr ()] in
-        Builder.value_binding ~loc ~pat:pattern ~expr
-    | _ -> (
-        match expression.pexp_desc with
-        | Pexp_constraint
-            ({ pexp_desc = Pexp_function ({ pparam_desc = Pparam_val _; _ } :: _, _, Pfunction_body _); _ }, _)
-        | Pexp_function ({ pparam_desc = Pparam_val _; _ } :: _, _, Pfunction_body _) ->
-            let function_name = get_function_name pattern.ppat_desc in
-            let outer_refs = Scope.collect_free_in_expr ~outer:locals expression in
-            let expr =
-              last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty function_name
-                expression
-            in
-            let vb = Builder.value_binding ~loc ~pat:pattern ~expr in
-            { vb with pvb_attributes = [ remove_alert_only ~loc ] }
-        | _ -> Builder.value_binding ~loc ~pat:pattern ~expr:(error_only_works_on ~loc))
+  let rec anonymous_name expr =
+    match expr.pexp_desc with
+    | Pexp_constraint (expr, _) | Pexp_coerce (expr, _, _) | Pexp_newtype (_, expr) -> anonymous_name expr
+    | Pexp_function (params, _, _) -> (
+        match
+          List.find_map
+            (fun param -> match param.pparam_desc with Pparam_val (_, _, pattern) -> Some pattern | _ -> None)
+            params
+        with
+        | Some pattern -> function_name pattern
+        | None -> unknown_name)
+    | _ -> unknown_name
 
-  let make_vb_with_melange_only ~loc ?type_constraint pattern expression =
-    let alert_message =
+  let alert_melange_only ~loc =
+    let message =
       "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of \
        match%platform."
     in
-    let alert =
-      Builder.attribute ~loc ~name:{ txt = "alert"; loc }
-        ~payload:
-          (PStr
-             [
-               Builder.pstr_eval ~loc
-                 (Builder.pexp_apply ~loc (Builder.evar ~loc melange_only)
-                    [ (Nolabel, Builder.estring ~loc alert_message) ])
-                 [];
-             ])
-    in
-    let expression = { expression with pexp_attributes = expression.pexp_attributes @ [ remove_alert_only ~loc ] } in
-    let pattern =
-      match type_constraint with
-      | Some type_constraint ->
-          Builder.ppat_constraint ~loc pattern { type_constraint with ptyp_attributes = [ alert ] }
-      | None -> { pattern with ppat_attributes = [ alert ] }
-    in
-    let warning =
-      Builder.attribute ~loc ~name:{ txt = "warning"; loc }
-        ~payload:(PStr [ Builder.pstr_eval ~loc (Builder.estring ~loc "-32") [] ])
-    in
-    let vb = Builder.value_binding ~loc ~pat:pattern ~expr:expression in
-    { vb with pvb_attributes = [ warning ] }
+    Builder.attribute ~loc ~name:{ txt = "alert"; loc }
+      ~payload:
+        (PStr
+           [
+             Builder.pstr_eval ~loc
+               (Builder.pexp_apply ~loc (Builder.evar ~loc melange_only) [ (Nolabel, Builder.estring ~loc message) ])
+               [];
+           ])
 
-  let rewrite_structure_vb ~loc ~locals vb =
+  let warning_unused_value ~loc =
+    Builder.attribute ~loc ~name:{ txt = "warning"; loc }
+      ~payload:(PStr [ Builder.pstr_eval ~loc (Builder.estring ~loc "-32") [] ])
+
+  let stub_value_binding ~top_level ~locals vb =
+    let attributes = List.filter (fun attr -> not (is_platform_tag attr.attr_name.txt)) vb.pvb_attributes in
     let pattern = vb.pvb_pat in
-    let expression = vb.pvb_expr in
-    let outer_refs = Scope.collect_free_in_expr ~outer:locals expression in
-    let rewrite_function () =
-      last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty
-        (get_function_name pattern.ppat_desc) expression
-    in
-    match expression.pexp_desc with
-    | Pexp_constraint ({ pexp_desc = Pexp_function _; _ }, type_constraint) ->
-        Some (make_vb_with_melange_only ~loc ~type_constraint pattern (rewrite_function ()))
-    | Pexp_function _ -> Some (make_vb_with_melange_only ~loc pattern (rewrite_function ()))
-    | Pexp_ident { txt = _; loc } ->
-        let item = wrap_with_ignores ~loc ~kept_bindings:Scope.String_set.empty ~outer_refs [%expr Obj.magic ()] in
-        Some (make_vb_with_melange_only ~loc pattern item)
-    | Pexp_newtype (type_name, expr) ->
-        let original_function_name = type_name.txt in
-        let item =
-          last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty original_function_name
-            expr
-        in
-        Some (make_vb_with_melange_only ~loc pattern item)
-    | _ -> None
+    let loc = pattern.ppat_loc in
+    let outer_refs = Scope.collect_free_in_expr ~outer:locals vb.pvb_expr in
+    match pattern with
+    | [%pat? ()] ->
+        {
+          vb with
+          pvb_expr = wrap_with_ignores ~loc ~kept_bindings:Scope.String_set.empty ~outer_refs [%expr ()];
+          pvb_attributes = attributes;
+        }
+    | _ -> (
+        match stub ~loc ~outer_refs (function_name pattern) vb.pvb_expr with
+        | None -> Builder.value_binding ~loc ~pat:pattern ~expr:(error_only_works_on ~loc)
+        | Some expr when top_level ->
+            let expr = { expr with pexp_attributes = expr.pexp_attributes @ [ remove_alert_only ~loc ] } in
+            let pat = { pattern with ppat_attributes = [ alert_melange_only ~loc ] } in
+            { (Builder.value_binding ~loc ~pat ~expr) with pvb_attributes = warning_unused_value ~loc :: attributes }
+        | Some expr ->
+            {
+              (Builder.value_binding ~loc ~pat:pattern ~expr) with
+              pvb_attributes = remove_alert_only ~loc :: attributes;
+            })
 
   let mapper =
     object (self)
       inherit [Scope.String_set.t] Ast_traverse.map_with_context as super
 
-      method! structure_item _ item =
+      method! structure locals items =
+        snd
+          (List.fold_left_map
+             (fun locals item ->
+               (Scope.String_set.diff locals (Scope.bindings_of_structure_item item), self#structure_item locals item))
+             locals items)
+
+      method! structure_item locals item =
         match item.pstr_desc with
         | Pstr_value (Recursive, vbs) ->
-            let locals = Scope.add_value_bindings vbs Scope.String_set.empty in
+            let locals = Scope.add_value_bindings vbs locals in
             { item with pstr_desc = Pstr_value (Recursive, List.map (self#value_binding locals) vbs) }
-        | Pstr_extension (({ txt; _ }, PStr [ { pstr_desc = Pstr_value (rec_flag, vbs); _ } ]), _)
-          when String.equal txt melange_only ->
+        | Pstr_extension (({ txt; _ }, payload), _) when String.equal txt melange_only -> (
             let loc = item.pstr_loc in
-            let locals =
-              match rec_flag with
-              | Recursive -> Scope.add_value_bindings vbs Scope.String_set.empty
-              | Nonrecursive -> Scope.String_set.empty
-            in
-            let rewrite vb =
-              match !mode with
-              | Js -> self#value_binding locals vb
-              | Native -> (
-                  match rewrite_structure_vb ~loc ~locals vb with
-                  | Some vb' -> vb'
-                  | None -> self#value_binding locals vb)
-            in
-            Builder.pstr_value ~loc rec_flag (List.map rewrite vbs)
-        | _ -> super#structure_item Scope.String_set.empty item
+            match payload with
+            | PStr [ { pstr_desc = Pstr_value (rec_flag, vbs); _ } ] ->
+                let locals =
+                  match rec_flag with Recursive -> Scope.add_value_bindings vbs locals | Nonrecursive -> locals
+                in
+                let rewrite =
+                  match !mode with
+                  | Js -> self#value_binding locals
+                  | Native -> stub_value_binding ~top_level:true ~locals
+                in
+                Builder.pstr_value ~loc rec_flag (List.map rewrite vbs)
+            | _ -> unsupported_structure_item ~loc)
+        | _ -> super#structure_item locals item
 
       method! expression locals expr =
         match expr.pexp_desc with
@@ -251,39 +274,23 @@ module Melange_only = struct
                 let result = wrap_with_ignores ~loc ~kept_bindings:Scope.String_set.empty ~outer_refs kept_expr' in
                 { result with pexp_attributes = result.pexp_attributes @ expr.pexp_attributes }
             | Error error_msg_expr -> error_msg_expr)
-        | Pexp_extension ({ txt; _ }, PStr [ { pstr_desc = Pstr_eval (payload, []); _ } ])
-          when String.equal txt melange_only -> (
+        | Pexp_extension ({ txt; _ }, payload) when String.equal txt melange_only -> (
             let loc = expr.pexp_loc in
-            match !mode with
-            | Js -> self#expression locals payload
-            | Native -> (
-                match payload.pexp_desc with
-                | Pexp_constraint
-                    ({ pexp_desc = Pexp_function (params, _, Pfunction_body expression); _ }, type_constraint) ->
-                    let outer_refs = Scope.collect_free_in_expr ~outer:locals payload in
-                    let fn = melange_only_fun ~loc ~outer_refs params expression in
-                    Builder.pexp_constraint ~loc
-                      { fn with pexp_attributes = expression.pexp_attributes }
-                      type_constraint
-                | Pexp_function ({ pparam_desc = Pparam_val (_, _, pattern); _ } :: _, _, Pfunction_body _) ->
-                    let outer_refs = Scope.collect_free_in_expr ~outer:locals payload in
-                    let function_name = get_function_name pattern.ppat_desc in
-                    last_expr_to_raise_melange_only ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty function_name
-                      payload
-                | Pexp_let (rec_flag, value_bindings, body) ->
-                    let vb_locals =
-                      match rec_flag with
-                      | Recursive -> Scope.add_value_bindings value_bindings locals
-                      | Nonrecursive -> locals
-                    in
-                    let vbs' =
-                      List.map
-                        (fun binding -> melange_only_value_binding ~locals:vb_locals binding.pvb_pat binding.pvb_expr)
-                        value_bindings
-                    in
-                    let body' = self#expression (Scope.add_value_bindings value_bindings locals) body in
-                    Builder.pexp_let ~loc rec_flag vbs' body'
-                | _ -> error_only_works_on ~loc))
+            match (!mode, payload) with
+            | Js, PStr [ { pstr_desc = Pstr_eval (payload, []); _ } ] -> self#expression locals payload
+            | Native, PStr [ { pstr_desc = Pstr_eval ({ pexp_desc = Pexp_let (rec_flag, vbs, body); _ }, []); _ } ] ->
+                let vb_locals =
+                  match rec_flag with Recursive -> Scope.add_value_bindings vbs locals | Nonrecursive -> locals
+                in
+                let vbs' = List.map (stub_value_binding ~top_level:false ~locals:vb_locals) vbs in
+                let body' = self#expression (Scope.add_value_bindings vbs locals) body in
+                Builder.pexp_let ~loc rec_flag vbs' body'
+            | Native, PStr [ { pstr_desc = Pstr_eval (payload, []); _ } ] -> (
+                let outer_refs = Scope.collect_free_in_expr ~outer:locals payload in
+                match stub ~loc ~outer_refs (anonymous_name payload) payload with
+                | Some stubbed -> stubbed
+                | None -> error_only_works_on ~loc)
+            | _ -> error_only_works_on ~loc)
         | Pexp_let (Nonrecursive, vbs, body) ->
             let vbs' = List.map (self#value_binding locals) vbs in
             let body' = self#expression (Scope.add_value_bindings vbs locals) body in
@@ -323,17 +330,24 @@ module Melange_only = struct
             let e2' = self#expression locals e2 in
             let body' = self#expression (Scope.add_pattern pat locals) body in
             { expr with pexp_desc = Pexp_for (pat, e1', e2', dir, body') }
-        | Pexp_object cls_str ->
-            let locals' =
-              List.fold_left
-                (fun s field ->
-                  match field.pcf_desc with Pcf_val (name, _, _) -> Scope.String_set.add name.txt s | _ -> s)
-                (Scope.add_pattern cls_str.pcstr_self locals)
-                cls_str.pcstr_fields
-            in
-            let fields' = List.map (self#class_field locals') cls_str.pcstr_fields in
-            { expr with pexp_desc = Pexp_object { cls_str with pcstr_fields = fields' } }
+        | Pexp_open (({ popen_expr = { pmod_desc = Pmod_structure items; _ }; _ } as od), body) ->
+            let od' = self#open_declaration locals od in
+            let body' = self#expression (Scope.String_set.diff locals (Scope.structure_bindings items)) body in
+            { expr with pexp_desc = Pexp_open (od', body') }
         | _ -> super#expression locals expr
+
+      method! class_structure locals cls_str =
+        let locals' = Scope.String_set.union locals (Scope.class_structure_bindings cls_str) in
+        let map_field field =
+          match field.pcf_desc with
+          | Pcf_val (name, mutable_flag, Cfk_concrete (override, init)) ->
+              {
+                field with
+                pcf_desc = Pcf_val (name, mutable_flag, Cfk_concrete (override, self#expression locals init));
+              }
+          | _ -> self#class_field locals' field
+        in
+        { cls_str with pcstr_fields = List.map map_field cls_str.pcstr_fields }
 
       method! case locals case =
         let locals' = Scope.add_pattern case.pc_lhs locals in
@@ -383,8 +397,16 @@ module Preprocess = struct
       [%ocaml.error
         [%e Builder.estring ~loc (Printf.sprintf "Don't use %s on expressions, use switch%%platform instead" name)]]]
 
-  let rec should_keep attrs =
-    match attrs with [] -> `keep | attr :: attrs -> if eval_attr attr = `drop then `drop else should_keep attrs
+  let evaluated : (Location.t, unit) Hashtbl.t = Hashtbl.create 16
+
+  let should_keep attrs =
+    List.iter (fun attr -> if is_platform_tag attr.attr_name.txt then Hashtbl.replace evaluated attr.attr_loc ()) attrs;
+    if List.exists (fun attr -> eval_attr attr = `drop) attrs then `drop else `keep
+
+  let floating_error ~loc attr =
+    error_extension ~loc
+      (Printf.sprintf "[ppx_platform] [@@@%s] works only as the first item of a structure or a signature"
+         attr.attr_name.txt)
 
   let rec should_keep_many list fn =
     match list with
@@ -445,6 +467,8 @@ module Preprocess = struct
     | Pstr_recmodule md -> if should_keep_many md (fun md -> md.pmb_attributes) = `keep then Some stri else None
     | Pstr_class cds -> if should_keep_many cds (fun cd -> cd.pci_attributes) = `keep then Some stri else None
     | Pstr_class_type ctds -> if should_keep_many ctds (fun ctd -> ctd.pci_attributes) = `keep then Some stri else None
+    | Pstr_attribute attr when is_platform_tag attr.attr_name.txt ->
+        Some (Builder.pstr_extension ~loc:attr.attr_loc (floating_error ~loc:attr.attr_loc attr) [])
     | Pstr_extension _ | Pstr_attribute _ -> Some stri
 
   let apply_config_on_signature_item sigi =
@@ -472,6 +496,8 @@ module Preprocess = struct
     | Psig_recmodule md -> if should_keep_many md (fun md -> md.pmd_attributes) = `keep then Some sigi else None
     | Psig_class cds -> if should_keep_many cds (fun cd -> cd.pci_attributes) = `keep then Some sigi else None
     | Psig_class_type ctds -> if should_keep_many ctds (fun ctd -> ctd.pci_attributes) = `keep then Some sigi else None
+    | Psig_attribute attr when is_platform_tag attr.attr_name.txt ->
+        Some (Builder.psig_extension ~loc:attr.attr_loc (floating_error ~loc:attr.attr_loc attr) [])
     | Psig_extension _ | Psig_attribute _ -> Some sigi
 
   let traverse =
@@ -479,10 +505,18 @@ module Preprocess = struct
       inherit Ast_traverse.map as super
 
       method! structure str =
-        let str = super#structure str in
+        let str =
+          List.filter_map
+            (fun item ->
+              let item' = self#structure_item item in
+              match (item.pstr_desc, item'.pstr_desc) with
+              | Pstr_extension ((_, PStr (_ :: _)), _), Pstr_extension ((_, PStr []), _) -> None
+              | _ -> Some item')
+            str
+        in
         match str with
         | { pstr_desc = Pstr_attribute attr; _ } :: rest when is_platform_tag attr.attr_name.txt ->
-            if eval_attr attr = `keep then rest else []
+            if eval_attr attr = `keep then List.filter_map apply_config_on_structure_item rest else []
         | str -> List.filter_map apply_config_on_structure_item str
 
       method! structure_item stri =
@@ -494,7 +528,7 @@ module Preprocess = struct
         let sigi = super#signature sigi in
         match sigi with
         | { psig_desc = Psig_attribute attr; _ } :: rest when is_platform_tag attr.attr_name.txt ->
-            if eval_attr attr = `keep then rest else []
+            if eval_attr attr = `keep then List.filter_map apply_config_on_signature_item rest else []
         | _ -> List.filter_map apply_config_on_signature_item sigi
 
       method! expression expr =
@@ -590,6 +624,31 @@ module Preprocess = struct
             let loc = pat.ppat_loc in
             if should_keep pat.ppat_attributes = `keep then pat else [%pat? _]
     end
+
+  let structure str =
+    Hashtbl.reset evaluated;
+    traverse#structure str
+
+  let signature sigi =
+    Hashtbl.reset evaluated;
+    traverse#signature sigi
+
+  let remove_evaluated =
+    object
+      inherit Ast_traverse.map as super
+
+      method! attributes attrs =
+        let keep attr =
+          if not (is_platform_tag attr.attr_name.txt) then true
+          else if Hashtbl.mem evaluated attr.attr_loc then false
+          else
+            Location.raise_errorf ~loc:attr.attr_loc
+              "[ppx_platform] [@%s] is not supported here. Use it on a structure or signature item, a constructor or \
+               record field of a type definition, a polymorphic variant tag, a pattern or an expression."
+              attr.attr_name.txt
+        in
+        super#attributes (List.filter keep attrs)
+    end
 end
 
 module Removed = struct
@@ -636,9 +695,9 @@ let () =
   let instrument =
     Driver.Instrument.V2.make ~position:Before (fun _ structure ->
         Removed.reject#structure structure;
-        let structure = Preprocess.traverse#structure structure in
-        Melange_only.traverse structure)
+        let structure = Preprocess.structure structure in
+        Preprocess.remove_evaluated#structure (Melange_only.traverse structure))
   in
   Driver.V2.register_transformation "ppx_platform" ~rules:Removed.rules ~instrument ~intf:(fun _ signature ->
       Removed.reject#signature signature;
-      Preprocess.traverse#signature signature)
+      Preprocess.remove_evaluated#signature (Preprocess.signature signature))

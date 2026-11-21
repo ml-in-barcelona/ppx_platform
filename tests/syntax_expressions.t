@@ -94,10 +94,10 @@ redundant but harmless.
   let match_guard opt limit =
     match opt with
     | Some v when v > limit ->
-        let h () =
+        let h _ =
           let _ = limit in
           let _ = v in
-          Ppx_platform.fail_melange_only "<unkwnown>"
+          Ppx_platform.fail_melange_only "<unknown>"
         in
         ignore h
     | Some v -> ignore v
@@ -124,7 +124,7 @@ redundant but harmless.
   let try_with f =
     try f ()
     with Failure msg ->
-      let report () =
+      let report _ =
         let _ = msg in
         Ppx_platform.fail_melange_only "report"
           [@@alert "-melange_only"]
@@ -170,9 +170,9 @@ redundant but harmless.
   
   let for_down () =
     for j = 2 downto 0 do
-      let h () =
+      let h _ =
         let _ = j in
-        Ppx_platform.fail_melange_only "<unkwnown>"
+        Ppx_platform.fail_melange_only "<unknown>"
       in
       ignore h
     done
@@ -300,7 +300,7 @@ values and get none.
     base
   
   let record_field r =
-    let get () =
+    let get _ =
       let _ = r in
       Ppx_platform.fail_melange_only "get"
         [@@alert "-melange_only"]
@@ -375,9 +375,10 @@ values and get none.
 3. Objects and classes: object self and instance variables (also mutable,
 assigned with `<-`), a method that is a [%melange_only fun ...], a class with a
 `let` before `object`, a class written with `fun`, and an object inside
-discarded code. In a class, the method body that is [%melange_only fun ...]
-keeps its type through the constrained form; see the known issues for the form
-without a type.
+discarded code. In a class, a method that is [%melange_only fun ...] keeps its
+type through a method type annotation; see the known issues for the form
+without one. In a class, `self` and instance variables used only in
+discarded code get an ignore, as in an immediate object.
 
   $ cat > objects.ml << 'EOF'
   > let immediate_object x =
@@ -412,8 +413,8 @@ without a type.
   > class with_fun =
   >   fun (prefix : string) ->
   >   object
-  >     method show =
-  >       [%melange_only (fun suffix -> print_string (prefix ^ suffix) : string -> unit)]
+  >     method show : string -> unit =
+  >       [%melange_only fun suffix -> print_string (prefix ^ suffix)]
   >   end
   > 
   > let object_in_discarded x =
@@ -443,10 +444,10 @@ without a type.
       val label = "o"
       method name = label
   
-      method handler () =
+      method handler _ =
         let _ = label in
         let _ = self in
-        Ppx_platform.fail_melange_only "<unkwnown>"
+        Ppx_platform.fail_melange_only "<unknown>"
     end
   
   class counter (init : int) =
@@ -457,17 +458,17 @@ without a type.
   
       method bump =
         let _ = step in
+        let _ = value in
         ()
     end
   
   class with_fun (prefix : string) =
     object
-      method show =
-        (fun suffix ->
-           let _ = prefix in
-           let _ = suffix in
-           Ppx_platform.fail_melange_only "print_string (prefix ^ suffix)"
-          : string -> unit)
+      method show : string -> unit =
+        fun suffix ->
+          let _ = prefix in
+          let _ = suffix in
+          Ppx_platform.fail_melange_only "suffix"
     end
   
   let object_in_discarded x =
@@ -569,7 +570,7 @@ expression in the Native branch. The js output keeps the opposite branches.
      0)
     [@ocaml.warning "-27"]
   
-  let native_only_expr x = (x + 1) [@native_only]
+  let native_only_expr x = x + 1
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only platform_native.ml
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only platform_js.ml
 
@@ -609,7 +610,8 @@ expression in the Native branch. The js output keeps the opposite branches.
 
 5. Other extension nodes inside discarded code are dropped on native with the
 rest of the code, as is [@melange_only] on an expression in the Melange branch.
-With -js they stay in the output. No ppx in this test expands `[%foo]` or
+With -js the extension nodes stay in the output, and the [@melange_only]
+attribute goes away from the code it keeps. No ppx in this test expands `[%foo]` or
 `[%bar.baz]`, so the js output is not compiled; the grep shows the nodes are
 kept unchanged.
 
@@ -633,7 +635,7 @@ kept unchanged.
     0
   
   let other_extension_in_fun x =
-    let f () =
+    let f _ =
       let _ = x in
       Ppx_platform.fail_melange_only "f"
         [@@alert "-melange_only"]
@@ -647,11 +649,11 @@ kept unchanged.
   $ grep -n "%foo\|%bar\|melange_only" extensions_js.ml
   1:let other_extension x = [%foo x]
   4:  let f () = [%bar.baz x] in
-  7:let melange_only_attr_in_melange_branch x = (x + 1) [@melange_only]
+  7:let melange_only_attr_in_melange_branch x = x + 1
 
 6. On kept code, [@melange_only] on an expression on native, [@native_only] on
 an expression with -js, and [%melange_only] on a value that is not a function
-are errors.
+are errors. The attribute that keeps an expression goes away from it.
 
   $ cat > expr_attrs.ml << 'EOF'
   > let melange_attr x = print_int (x + 1 [@melange_only])
@@ -665,7 +667,7 @@ are errors.
       [%ocaml.error
         "Don't use melange_only on expressions, use switch%platform instead"]
   
-  let native_attr x = print_int ((x + 1) [@native_only])
+  let native_attr x = print_int (x + 1)
   
   let melange_only_value x =
     [%ocaml.error
@@ -673,7 +675,7 @@ are errors.
        cases, use switch%platform or feel free to open an issue in \
        https://github.com/ml-in-barcelona/ppx_platform."]
   $ ./standalone.exe -impl expr_attrs.ml -js | ocamlformat - --enable-outside-detected-project --impl
-  let melange_attr x = print_int ((x + 1) [@melange_only])
+  let melange_attr x = print_int (x + 1)
   
   let native_attr x =
     print_int
@@ -771,11 +773,10 @@ warnings into errors, so that all warnings show.
                       ^
   Warning 27 [unused-var-strict]: unused variable f.
 
-Known issues
-
-A. A local exception that only discarded code uses gets no ignore, so native
-fails with warning 38 (unused-extension). A local module gives warning 60 in
-the same way (see in_scope_idents.t).
+8. A local exception that only discarded code uses gets no ignore, so native
+warns 38 (unused-extension). A local module warns 60 in the same way (see
+in_scope_idents.t). Both are accepted costs: an exception or a module is not a
+value, so `let _ = name` cannot name it.
 
   $ cat > local_exception.ml << 'EOF'
   > let local_exception x =
@@ -792,17 +793,15 @@ the same way (see in_scope_idents.t).
     let exception Local of int in
     let _ = x in
     ()
-  $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only local_exception_native.ml
+  $ ocamlc -c -w +A-70 -alert @melange_only local_exception_native.ml
   File "local_exception_native.ml", line 2, characters 16-28:
   2 |   let exception Local of int in
                       ^^^^^^^^^^^^
-  Error (warning 38 [unused-extension]): unused exception Local
-  [2]
+  Warning 38 [unused-extension]: unused exception Local
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only local_exception_js.ml
 
-B. In a class (not an immediate object), `self` that only discarded code uses
-gets no ignore, so native fails with warning 27. Class instance variables give
-no warning when unused, so they need no ignore.
+9. In a class (not an immediate object), `self` that only discarded code uses
+gets an ignore, so native compiles.
 
   $ cat > class_self.ml << 'EOF'
   > class class_self =
@@ -818,19 +817,21 @@ no warning when unused, so they need no ignore.
   class class_self =
     object (self)
       method get = 1
-      method run = ()
+  
+      method run =
+        let _ = self in
+        ()
     end
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only class_self_native.ml
-  File "class_self_native.ml", line 2, characters 9-15:
-  2 |   object (self)
-               ^^^^^^
-  Error (warning 27 [unused-var-strict]): unused variable self.
-  [2]
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only class_self_js.ml
 
-C. In a class, a method that is [%melange_only fun x -> ...] without a type
-loses the parameter type on native, and the class fails with an unbound type
-variable. The constrained form in section 3 compiles.
+Known issues
+
+A. In a class, a method that is [%melange_only fun x -> ...] without a method
+type annotation loses the parameter type on native, and the class fails with
+an unbound type variable. A type constraint inside the extension does not help:
+the stub drops it, because it can name types that exist only in the Melange
+build. The method type annotation in section 3 compiles.
 
   $ cat > class_method_fun.ml << 'EOF'
   > class class_untyped_method_fun =
@@ -861,3 +862,11 @@ variable. The constrained form in section 3 compiles.
          The method show has type 'a -> 'b where 'a is unbound
   [2]
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only class_method_fun_js.ml
+
+B. [@melange_only] on a pattern makes the pattern `_` on Native. In a parameter
+this drops a Melange-only name (see at_melange_only.t), but in a match case the
+case then matches every value, so `B` gives 1 on Native:
+
+  $ printf 'let pat = function `A [@melange_only] -> 1 | `B -> 2\n' > pattern_attr.ml
+  $ ./standalone.exe -impl pattern_attr.ml | ocamlformat - --enable-outside-detected-project --impl
+  let pat = function _ -> 1 | `B -> 2

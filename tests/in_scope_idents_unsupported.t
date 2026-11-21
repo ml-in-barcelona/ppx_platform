@@ -189,7 +189,7 @@ Confirm that opaque include/open cases did NOT emit unbound identifiers:
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun () ->
+   (fun _ ->
     Ppx_platform.fail_melange_only "use_ext_include")
     [@alert "-melange_only"]
   [@@warning "-32"]
@@ -200,7 +200,7 @@ Confirm that opaque include/open cases did NOT emit unbound identifiers:
          melange_only
            "This value only exists in the Melange build. Use it inside a \
             let%melange_only function, or a Melange branch of match%platform."]) =
-   (fun () ->
+   (fun _ ->
     Ppx_platform.fail_melange_only "use_named_sig_include")
     [@alert "-melange_only"]
   [@@warning "-32"]

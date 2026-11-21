@@ -31,8 +31,16 @@ let rec bindings_of_structure_item item =
   | Pstr_primitive vd -> String_set.singleton vd.pval_name.txt
   | Pstr_include { pincl_mod = { pmod_desc = Pmod_structure items; _ }; _ }
   | Pstr_extension (({ txt = "private"; _ }, PStr items), _) ->
-      List.fold_left (fun acc i -> String_set.union acc (bindings_of_structure_item i)) String_set.empty items
+      structure_bindings items
   | _ -> String_set.empty
+
+and structure_bindings items =
+  List.fold_left (fun acc item -> String_set.union acc (bindings_of_structure_item item)) String_set.empty items
+
+let class_structure_bindings cls_str =
+  List.fold_left
+    (fun acc field -> match field.pcf_desc with Pcf_val (name, _, _) -> String_set.add name.txt acc | _ -> acc)
+    (pattern_bindings cls_str.pcstr_self) cls_str.pcstr_fields
 
 let collect_free_in_expr ~outer expr =
   let collector =
@@ -103,21 +111,17 @@ let collect_free_in_expr ~outer expr =
             self#with_bound (add_pattern pat bound) self#expression body acc
         | Pexp_open ({ popen_expr = { pmod_desc = Pmod_structure items; _ } as me; _ }, body) ->
             let acc = self#module_expr me acc in
-            let bound' =
-              List.fold_left (fun acc item -> String_set.union acc (bindings_of_structure_item item)) bound items
-            in
-            self#with_bound bound' self#expression body acc
-        | Pexp_object cls_str ->
-            let bound' =
-              List.fold_left
-                (fun acc field ->
-                  match field.pcf_desc with Pcf_val (name, _, _) -> String_set.add name.txt acc | _ -> acc)
-                (add_pattern cls_str.pcstr_self bound) cls_str.pcstr_fields
-            in
-            self#with_bound bound'
-              (fun fields acc -> List.fold_left (fun acc f -> self#class_field f acc) acc fields)
-              cls_str.pcstr_fields acc
+            self#with_bound (String_set.union bound (structure_bindings items)) self#expression body acc
         | _ -> super#expression expr acc
+
+      method! class_structure cls_str ((bound, _) as acc) =
+        let bound' = String_set.union bound (class_structure_bindings cls_str) in
+        List.fold_left
+          (fun acc field ->
+            match field.pcf_desc with
+            | Pcf_val (_, _, Cfk_concrete (_, init)) -> self#expression init acc
+            | _ -> self#with_bound bound' self#class_field field acc)
+          acc cls_str.pcstr_fields
 
       method! case case ((bound, _) as acc) =
         self#with_bound (add_pattern case.pc_lhs bound)
@@ -163,27 +167,3 @@ let collect_free_in_expr ~outer expr =
     end
   in
   snd (collector#expression expr (String_set.empty, String_set.empty))
-
-let rec wildcard_shadowed_pattern ~shadowed pat =
-  let recurse = wildcard_shadowed_pattern ~shadowed in
-  match pat.ppat_desc with
-  | Ppat_var { txt; _ } when String_set.mem txt shadowed -> { pat with ppat_desc = Ppat_any }
-  | Ppat_alias (p, { txt; _ }) when String_set.mem txt shadowed -> recurse p
-  | Ppat_alias (p, name) -> { pat with ppat_desc = Ppat_alias (recurse p, name) }
-  | Ppat_tuple pats -> { pat with ppat_desc = Ppat_tuple (List.map recurse pats) }
-  | Ppat_array pats -> { pat with ppat_desc = Ppat_array (List.map recurse pats) }
-  | Ppat_construct (lid, Some (newtypes, p)) ->
-      { pat with ppat_desc = Ppat_construct (lid, Some (newtypes, recurse p)) }
-  | Ppat_variant (lbl, Some p) -> { pat with ppat_desc = Ppat_variant (lbl, Some (recurse p)) }
-  | Ppat_record (fields, closed) ->
-      { pat with ppat_desc = Ppat_record (List.map (fun (lid, p) -> (lid, recurse p)) fields, closed) }
-  | Ppat_or (p1, p2) -> { pat with ppat_desc = Ppat_or (recurse p1, recurse p2) }
-  | Ppat_constraint (p, ty) -> { pat with ppat_desc = Ppat_constraint (recurse p, ty) }
-  | Ppat_lazy p -> { pat with ppat_desc = Ppat_lazy (recurse p) }
-  | Ppat_exception p -> { pat with ppat_desc = Ppat_exception (recurse p) }
-  | Ppat_open (lid, p) -> { pat with ppat_desc = Ppat_open (lid, recurse p) }
-  | Ppat_var _ | Ppat_unpack _ | Ppat_any | Ppat_constant _ | Ppat_interval _
-  | Ppat_construct (_, None)
-  | Ppat_variant (_, None)
-  | Ppat_type _ | Ppat_extension _ ->
-      pat
