@@ -102,7 +102,7 @@ redundant but harmless.
         let h _ =
           let _ = limit in
           let _ = v in
-          Ppx_platform.fail_melange_only "control.ml:4:14"
+          Ppx_platform.fail_melange_only "control.ml:4:15"
         in
         ignore h
     | Some v -> ignore v
@@ -183,7 +183,7 @@ redundant but harmless.
     for j = 2 downto 0 do
       let h _ =
         let _ = j in
-        Ppx_platform.fail_melange_only "control.ml:52:12"
+        Ppx_platform.fail_melange_only "control.ml:52:13"
       in
       ignore h
     done
@@ -464,7 +464,7 @@ discarded code get an ignore, as in an immediate object.
       method handler _ =
         let _ = label in
         let _ = self in
-        Ppx_platform.fail_melange_only "objects.ml:16:21"
+        Ppx_platform.fail_melange_only "objects.ml:16:22"
     end
   
   class counter (init : int) =
@@ -485,7 +485,7 @@ discarded code get an ignore, as in an immediate object.
         fun suffix ->
           let _ = prefix in
           let _ = suffix in
-          Ppx_platform.fail_melange_only "objects.ml:34:6"
+          Ppx_platform.fail_melange_only "objects.ml:34:7"
     end
   
   let object_in_discarded x =
@@ -869,7 +869,7 @@ Melange build. Workaround: add a method type annotation, as in section 3.
     object
       method show suffix =
         let _ = suffix in
-        Ppx_platform.fail_melange_only "class_method_fun.ml:3:18"
+        Ppx_platform.fail_melange_only "class_method_fun.ml:3:19"
     end
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only class_method_fun_native.ml
   File "class_method_fun_native.ml", lines 1-6, characters 0-5:
@@ -877,7 +877,7 @@ Melange build. Workaround: add a method type annotation, as in section 3.
   2 |   object
   3 |     method show suffix =
   4 |       let _ = suffix in
-  5 |       Ppx_platform.fail_melange_only "class_method_fun.ml:3:18"
+  5 |       Ppx_platform.fail_melange_only "class_method_fun.ml:3:19"
   6 |   end
   Error: Some type variables are unbound in this type:
            class class_untyped_method_fun : object method show : 'a -> 'b end
@@ -899,8 +899,8 @@ match every value. On function parameters and let bindings the pattern becomes
   $ ./standalone.exe -impl case_pattern.ml | ocamlformat - --enable-outside-detected-project --impl
   let in_function = function
     | [%ocaml.error
-        "Don't use melange_only on match case patterns, use switch%platform \
-         instead"] ->
+        "Don't use melange_only on case patterns (match, function, try), use \
+         switch%platform instead"] ->
         1
     | `B -> 2
   
@@ -910,8 +910,8 @@ match every value. On function parameters and let bindings the pattern becomes
     try f ()
     with
     | [%ocaml.error
-        "Don't use melange_only on match case patterns, use switch%platform \
-         instead"]
+        "Don't use melange_only on case patterns (match, function, try), use \
+         switch%platform instead"]
     ->
       0
   $ ./standalone.exe -impl case_pattern.ml -js | ocamlformat - --enable-outside-detected-project --impl
@@ -921,8 +921,8 @@ match every value. On function parameters and let bindings the pattern becomes
     match x with
     | `A -> 1
     | [%ocaml.error
-        "Don't use native_only on match case patterns, use switch%platform \
-         instead"] ->
+        "Don't use native_only on case patterns (match, function, try), use \
+         switch%platform instead"] ->
         2
   
   let in_try f = try f () with Not_found -> 0

@@ -265,8 +265,8 @@ Pstr_class_type
     method get : int
   end
 
-Pexp_open with a platform attribute is an error in the build that drops it, as
-on other expressions:
+Pexp_open with a platform attribute is an error in the build that drops it,
+located at the open, that says where to move the open:
 
   $ cat > input_pexp_open.ml << EOF
   > let f () =
@@ -279,9 +279,11 @@ on other expressions:
   let f () =
     let open Unix in
     [%ocaml.error
-      "Don't use melange_only on expressions, use switch%platform instead"]
+      "Don't use melange_only on open, move the open into a let%melange_only \
+       function or the Melange branch of match%platform"]
 
   $ ./standalone.exe -impl input_pexp_open.ml -js | ocamlformat - --enable-outside-detected-project --impl
   let f () =
     [%ocaml.error
-      "Don't use native_only on expressions, use switch%platform instead"]
+      "Don't use native_only on open, move the open into the Native branch of \
+       match%platform"]

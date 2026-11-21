@@ -133,7 +133,7 @@ Verify selected generated expansions:
     let a, set_a = use_state 4 in
     use_effect (fun _ ->
         let _ = set_a in
-        Ppx_platform.fail_melange_only "supported_input.ml:7:13");
+        Ppx_platform.fail_melange_only "supported_input.ml:7:14");
     a
 
   $ grep -A 6 "let use_shadowed_default" supported.ml
@@ -442,5 +442,5 @@ Bindings wrapped in `[%%private ...]` are top-level values, so they get no ignor
     let visible = 2
   end
   
-  let use_priv _ = Ppx_platform.fail_melange_only "private_input.ml:10:2"
-  let use_hidden_mod _ = Ppx_platform.fail_melange_only "private_input.ml:13:2"
+  let use_priv _ = Ppx_platform.fail_melange_only "private_input.ml:10:3"
+  let use_hidden_mod _ = Ppx_platform.fail_melange_only "private_input.ml:13:3"

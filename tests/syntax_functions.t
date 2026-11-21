@@ -289,37 +289,37 @@ an enclosing local, also in a parameter after the first, keep that local used.
   let as_argument x =
     register (fun _ ->
         let _ = x in
-        Ppx_platform.fail_melange_only "enclosing_input.ml:3:29")
+        Ppx_platform.fail_melange_only "enclosing_input.ml:3:30")
   
   let as_record_field label =
     {
       on_click =
         (fun _ ->
           let _ = label in
-          Ppx_platform.fail_melange_only "enclosing_input.ml:5:15");
+          Ppx_platform.fail_melange_only "enclosing_input.ml:5:16");
       on_key =
         (fun key ->
           let _ = key in
           let _ = label in
-          Ppx_platform.fail_melange_only "enclosing_input.ml:6:13");
+          Ppx_platform.fail_melange_only "enclosing_input.ml:6:14");
     }
   
   let in_tuple n =
     ( (fun _ ->
         let _ = n in
-        Ppx_platform.fail_melange_only "enclosing_input.ml:7:18"),
+        Ppx_platform.fail_melange_only "enclosing_input.ml:7:19"),
       0 )
   
   let returns_melange_fun a =
    fun b ->
     let _ = a in
     let _ = b in
-    Ppx_platform.fail_melange_only "enclosing_input.ml:8:28"
+    Ppx_platform.fail_melange_only "enclosing_input.ml:8:29"
   
   let constrained_arg x =
     register (fun _ ->
         let _ = x in
-        Ppx_platform.fail_melange_only "enclosing_input.ml:9:33")
+        Ppx_platform.fail_melange_only "enclosing_input.ml:9:34")
   
   let add a b = a + b
   
@@ -327,7 +327,7 @@ an enclosing local, also in a parameter after the first, keep that local used.
     let add_n = add n in
     register (fun _ ->
         let _ = add_n in
-        Ppx_platform.fail_melange_only "enclosing_input.ml:13:11")
+        Ppx_platform.fail_melange_only "enclosing_input.ml:13:12")
   
   let labelled_enclosing ~x ~y =
     let (f
@@ -677,9 +677,9 @@ build.
   12:    Ppx_platform.fail_melange_only "f"
   26:    Ppx_platform.fail_melange_only "f"
   41:    Ppx_platform.fail_melange_only "f"
-  49:      Ppx_platform.fail_melange_only "local_stubs_input.ml:11:30")
-  55:      Ppx_platform.fail_melange_only "local_stubs_input.ml:12:29")
-  61:      Ppx_platform.fail_melange_only "local_stubs_input.ml:13:28")
+  49:      Ppx_platform.fail_melange_only "local_stubs_input.ml:11:31")
+  55:      Ppx_platform.fail_melange_only "local_stubs_input.ml:12:30")
+  61:      Ppx_platform.fail_melange_only "local_stubs_input.ml:13:29")
   $ cp local_stubs.mli local_stubs_native.mli
   $ cp local_stubs.mli local_stubs_js.mli
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only local_stubs_native.mli
@@ -757,9 +757,9 @@ location of the pattern (see syntax_bindings.t section 7). The lines come
 from section 3.
 
   $ grep -n "fail_melange_only" enclosing_native.ml | head -6
-  8:      Ppx_platform.fail_melange_only "enclosing_input.ml:3:29")
-  15:        Ppx_platform.fail_melange_only "enclosing_input.ml:5:15");
-  20:        Ppx_platform.fail_melange_only "enclosing_input.ml:6:13");
-  26:      Ppx_platform.fail_melange_only "enclosing_input.ml:7:18"),
-  33:  Ppx_platform.fail_melange_only "enclosing_input.ml:8:28"
-  38:      Ppx_platform.fail_melange_only "enclosing_input.ml:9:33")
+  8:      Ppx_platform.fail_melange_only "enclosing_input.ml:3:30")
+  15:        Ppx_platform.fail_melange_only "enclosing_input.ml:5:16");
+  20:        Ppx_platform.fail_melange_only "enclosing_input.ml:6:14");
+  26:      Ppx_platform.fail_melange_only "enclosing_input.ml:7:19"),
+  33:  Ppx_platform.fail_melange_only "enclosing_input.ml:8:29"
+  38:      Ppx_platform.fail_melange_only "enclosing_input.ml:9:34")

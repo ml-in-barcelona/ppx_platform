@@ -266,7 +266,7 @@ and a top-level let%melange_only rec ... and ...
     let h _ =
       let _ = x in
       let _ = y in
-      Ppx_platform.fail_melange_only "lets_input.ml:80:10"
+      Ppx_platform.fail_melange_only "lets_input.ml:80:11"
     in
     ignore h;
     y
@@ -496,7 +496,7 @@ is harmless.
     let h _ =
       let _ = a in
       let _ = b in
-      Ppx_platform.fail_melange_only "patterns_input.ml:64:10"
+      Ppx_platform.fail_melange_only "patterns_input.ml:64:11"
     in
     ignore h;
     a
@@ -893,7 +893,9 @@ binds, so native code that uses it fails under -alert @melange_only. This
 holds for a local stub, and for a top-level binding whose pattern has a type
 constraint or an alias: the alert goes on each name in the pattern, after the
 attributes the pattern already has. The ignores that the ppx adds, and uses in
-the Melange branch of match%platform, do not trigger the alert.
+the Melange branch of match%platform, do not trigger the alert. Only a name
+bound to a local stub in scope gets the alert suppression: the parameter `f`
+of `k` has the name of the stub in `h`, and its ignore has no attribute.
 
   $ cat > alert_input.ml << 'EOF'
   > let%melange_only (typed : int -> unit) = fun x -> print_int x
@@ -913,6 +915,13 @@ the Melange branch of match%platform, do not trigger the alert.
   > let local_in_melange_branch x =
   >   let%melange_only f y = print_int (x + y) in
   >   match%platform () with Native -> () | Melange -> f 1
+  > 
+  > let h () =
+  >   let%melange_only f () = 1 in
+  >   match%platform () with Native -> 0 | Melange -> f ()
+  > 
+  > let k (f : unit -> int) =
+  >   match%platform () with Native -> () | Melange -> ignore (f ())
   > EOF
 
   $ ./standalone.exe -impl alert_input.ml | ocamlformat - --enable-outside-detected-project --impl > alert_native.ml
@@ -926,7 +935,7 @@ the Melange branch of match%platform, do not trigger the alert.
       int -> unit =
    (fun x ->
     let _ = x in
-    Ppx_platform.fail_melange_only "alert_input.ml:1:17")
+    Ppx_platform.fail_melange_only "typed")
     [@alert "-melange_only"]
   [@@warning "-32"]
   
@@ -943,7 +952,7 @@ the Melange branch of match%platform, do not trigger the alert.
       int -> unit =
    (fun x ->
     let _ = x in
-    Ppx_platform.fail_melange_only "alert_input.ml:2:17")
+    Ppx_platform.fail_melange_only "alert_input.ml:2:18")
     [@alert "-melange_only"]
   [@@warning "-32"]
   
@@ -956,7 +965,7 @@ the Melange branch of match%platform, do not trigger the alert.
       int -> unit =
    (fun x ->
     let _ = x in
-    Ppx_platform.fail_melange_only "alert_input.ml:3:17")
+    Ppx_platform.fail_melange_only "attributed")
     [@alert "-melange_only"]
   [@@warning "-32"]
   
@@ -995,6 +1004,23 @@ the Melange branch of match%platform, do not trigger the alert.
        [@@alert "-melange_only"]
     in
     let _ = (f [@alert "-melange_only"]) in
+    ()
+  
+  let h () =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ -> Ppx_platform.fail_melange_only "f"
+       [@@alert "-melange_only"]
+    in
+    let _ = (f [@alert "-melange_only"]) in
+    0
+  
+  let k (f : unit -> int) =
+    let _ = f in
     ()
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only alert_native.ml
   File "alert_native.ml", line 44, characters 2-7:

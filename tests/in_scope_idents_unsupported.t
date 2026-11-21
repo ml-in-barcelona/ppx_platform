@@ -306,4 +306,5 @@ expressions. Move the open into the melange_only function, as in case 2 above:
   $ ./standalone.exe -impl local_open_attr.ml | ocamlformat - --enable-outside-detected-project --impl
   let use_local_open () =
     [%ocaml.error
-      "Don't use melange_only on expressions, use switch%platform instead"]
+      "Don't use melange_only on open, move the open into a let%melange_only \
+       function or the Melange branch of match%platform"]

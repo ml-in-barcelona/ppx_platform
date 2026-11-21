@@ -144,7 +144,7 @@
   let expression a b =
     let _ = a in
     let _ = b in
-    Ppx_platform.fail_melange_only "input.ml:19:17"
+    Ppx_platform.fail_melange_only "input.ml:19:18"
   
   module type S = sig
     val x : int
@@ -241,7 +241,7 @@ Partial application does not raise; full application raises Melange_only
   cases full: raises cases
   inner partial: no raise
   expression partial: no raise
-  expression full: raises input.ml:19:17
+  expression full: raises input.ml:19:18
 
 The -js output type-checks against the same signature
 

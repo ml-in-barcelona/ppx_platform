@@ -57,10 +57,7 @@ let error_extension ~loc message =
 module Melange_only = struct
   let location_name loc =
     let pos = loc.loc_start in
-    Printf.sprintf "%s:%d:%d" pos.pos_fname pos.pos_lnum (pos.pos_cnum - pos.pos_bol)
-
-  let function_name pattern =
-    match pattern.ppat_desc with Ppat_var { txt = name; _ } -> name | _ -> location_name pattern.ppat_loc
+    Printf.sprintf "%s:%d:%d" pos.pos_fname pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1)
 
   let local_stubs = ref Scope.String_set.empty
 
@@ -92,6 +89,9 @@ module Melange_only = struct
     | Ppat_var name -> Some name
     | Ppat_constraint (pattern, _) -> plain_variable pattern
     | _ -> None
+
+  let function_name pattern =
+    match plain_variable pattern with Some { txt = name; _ } -> name | None -> location_name pattern.ppat_loc
 
   let any_param ~loc = { pparam_loc = loc; pparam_desc = Pparam_val (Nolabel, None, Builder.ppat_any ~loc) }
 
@@ -294,8 +294,10 @@ module Melange_only = struct
                   match rec_flag with Recursive -> Scope.add_value_bindings vbs locals | Nonrecursive -> locals
                 in
                 let vbs' = List.map (stub_value_binding ~top_level:false ~locals:vb_locals) vbs in
-                local_stubs := Scope.add_value_bindings vbs !local_stubs;
+                let outer_stubs = !local_stubs in
+                local_stubs := Scope.add_value_bindings vbs outer_stubs;
                 let body' = self#expression (Scope.add_value_bindings vbs locals) body in
+                local_stubs := outer_stubs;
                 Builder.pexp_let ~loc rec_flag vbs' body'
             | Native, PStr [ { pstr_desc = Pstr_eval (payload, []); _ } ] -> (
                 let outer_refs = Scope.collect_free_in_expr ~outer:locals payload in
@@ -413,6 +415,16 @@ module Preprocess = struct
           Builder.estring ~loc
             (Printf.sprintf "Don't use %s on expressions, use switch%%platform instead" (dropped_name attrs))]]]
 
+  let open_error ~loc attrs =
+    let name = dropped_name attrs in
+    let target =
+      if String.equal name melange_only then "a let%melange_only function or the Melange branch of match%platform"
+      else "the Native branch of match%platform"
+    in
+    [%expr
+      [%ocaml.error
+        [%e Builder.estring ~loc (Printf.sprintf "Don't use %s on open, move the open into %s" name target)]]]
+
   let evaluated : (Location.t, unit) Hashtbl.t = Hashtbl.create 16
 
   let should_keep attrs =
@@ -527,7 +539,7 @@ module Preprocess = struct
           let loc = pat.ppat_loc in
           Builder.ppat_extension ~loc
             (error_extension ~loc
-               (Printf.sprintf "Don't use %s on match case patterns, use switch%%platform instead"
+               (Printf.sprintf "Don't use %s on case patterns (match, function, try), use switch%%platform instead"
                   (dropped_name pat.ppat_attributes)))
     end
 
@@ -634,7 +646,7 @@ module Preprocess = struct
               | _ -> expr)
         | _, Pexp_open (od, _) when should_keep expr.pexp_attributes = `drop || should_keep od.popen_attributes = `drop
           ->
-            expression_error ~loc:expr.pexp_loc (expr.pexp_attributes @ od.popen_attributes)
+            open_error ~loc:od.popen_loc (expr.pexp_attributes @ od.popen_attributes)
         | _ -> (
             let expr = super#expression expr in
             let loc = expr.pexp_loc in

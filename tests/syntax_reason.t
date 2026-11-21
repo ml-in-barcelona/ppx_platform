@@ -170,7 +170,7 @@ that use a local stub outside a Melange branch mark the use with
     let h y =
       let _ = x in
       let _ = y in
-      Ppx_platform.fail_melange_only "bindings.ml:16:10"
+      Ppx_platform.fail_melange_only "bindings.ml:16:11"
     in
     ignore h
   
@@ -271,14 +271,14 @@ destructuring, in the discarded function and in the enclosing function
    fun _ ->
     let _ = a in
     let _ = b in
-    Ppx_platform.fail_melange_only "params.ml:23:26"
+    Ppx_platform.fail_melange_only "params.ml:23:27"
   
   let curried x =
    fun a b ->
     let _ = a in
     let _ = b in
     let _ = x in
-    Ppx_platform.fail_melange_only "params.ml:24:16"
+    Ppx_platform.fail_melange_only "params.ml:24:17"
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only params_native.ml
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only params_js.ml
 
@@ -325,7 +325,7 @@ code
     let count, setCount = React.useState (fun () -> 0) in
     React.useEffect0 (fun _ ->
         let _ = setCount in
-        Ppx_platform.fail_melange_only "hooks.ml:4:4");
+        Ppx_platform.fail_melange_only "hooks.ml:4:5");
     count
   
   let useSwitchSetter () =
@@ -395,7 +395,7 @@ there: that is the accepted cost recorded in in_scope_idents_unsupported.t.
     let open M in
     fun _ ->
       let _ = x in
-      Ppx_platform.fail_melange_only "opens.ml:3:37"
+      Ppx_platform.fail_melange_only "opens.ml:3:38"
   
   let localOpenBlock x =
     let open M in
@@ -462,7 +462,7 @@ not errors in this section.
   let shadowedByParam x =
     let h x =
       let _ = x in
-      Ppx_platform.fail_melange_only "shadow.ml:5:32"
+      Ppx_platform.fail_melange_only "shadow.ml:5:33"
     in
     ignore h
   
@@ -563,10 +563,12 @@ Dropping only the open would leave the names from M unbound in the body.
   
   let openAttr x =
     [%ocaml.error
-      "Don't use melange_only on expressions, use switch%platform instead"]
+      "Don't use melange_only on open, move the open into a let%melange_only \
+       function or the Melange branch of match%platform"]
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only open_attr_native.ml
   File "open_attr_native.ml", line 6, characters 4-15:
   6 |   [%ocaml.error
           ^^^^^^^^^^^
-  Error: Don't use melange_only on expressions, use switch%platform instead
+  Error: Don't use melange_only on open, move the open into a let%melange_only
+         function or the Melange branch of match%platform
   [2]
