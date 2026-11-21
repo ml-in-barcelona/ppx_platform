@@ -97,11 +97,9 @@ Detecting in-scope identifiers in the discarded branch of match%platform on both
   >   match%platform () with
   >   | Native ->
   >       let open [@native_only] Nat_open in
-  >       let open [@melange_only] Mel_open in
   >       x + v
   >   | Melange ->
   >       let open [@melange_only] Mel_open in
-  >       let open [@native_only] Nat_open in
   >       x + v
   > 
   > (* Value restriction: polymorphic value stays polymorphic when wrapped in let _ = *)

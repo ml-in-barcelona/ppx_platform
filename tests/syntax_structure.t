@@ -630,13 +630,10 @@ Warning 60 for the unused local module is the accepted cost from section 5.
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only js/local_module.mli
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I js js/local_module.ml
 
-Known issues
-
-This case records the current, wrong result.
-
-A. On Native the stub drops the type annotations, so the Native output has a
-more general type than the Melange output. An .mli hides this (section 1);
-without one the inferred interfaces differ:
+10. Limit: on Native the stub drops the type annotations, because they can
+name types that exist only in the Melange build. Without an .mli the Native
+output has a more general type than the Melange output. Workaround: write an
+.mli, as in section 1. Without one the inferred interfaces differ:
 
   $ ocamlc -i -I native native/top.ml | grep 'two\|annotated'
   val two : 'a -> 'b -> 'c

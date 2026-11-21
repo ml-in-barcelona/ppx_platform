@@ -3,6 +3,11 @@ ppx runs, as a Reason project build does. Each case shows the Native output and
 compiles it on Native and on Melange (-js). The inputs have no interface file,
 so warning 70 (missing mli) is off everywhere.
 
+A local let%melange_only stub has the melange_only alert, so a native use of
+it fails under -alert @melange_only (syntax_bindings.t section 7). The inputs
+that use a local stub outside a Melange branch mark the use with
+[@alert "-melange_only"].
+
   $ cat > ppx_platform.ml << 'EOF'
   > exception Melange_only of string
   > let fail_melange_only name = raise (Melange_only name)
@@ -35,7 +40,7 @@ so warning 70 (missing mli) is off everywhere.
   > 
   > let localBinding = x => {
   >   let%melange_only handler = () => Js.log(x);
-  >   ignore(handler);
+  >   ignore([@alert "-melange_only"] handler);
   > };
   > 
   > let localRec = x => {
@@ -45,7 +50,7 @@ so warning 70 (missing mli) is off everywhere.
   >     } else {
   >       Js.log(x);
   >     };
-  >   ignore(loop);
+  >   ignore([@alert "-melange_only"] loop);
   > };
   > 
   > let localUnit = x => {
@@ -125,22 +130,34 @@ so warning 70 (missing mli) is off everywhere.
   [@@warning "-32"]
   
   let localBinding x =
-    let handler _ =
+    let (handler
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = x in
       Ppx_platform.fail_melange_only "handler"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore handler
+    ignore (handler [@alert "-melange_only"])
   
   let localRec x =
-    let rec loop n =
+    let rec (loop
+             [@alert
+               melange_only
+                 "This value only exists in the Melange build. Use it inside a \
+                  let%melange_only function, or a Melange branch of \
+                  match%platform."]) =
+     fun n ->
       let _ = loop in
       let _ = n in
       let _ = x in
       Ppx_platform.fail_melange_only "loop"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore loop
+    ignore (loop [@alert "-melange_only"])
   
   let localUnit x =
     let () =
@@ -153,7 +170,7 @@ so warning 70 (missing mli) is off everywhere.
     let h y =
       let _ = x in
       let _ = y in
-      Ppx_platform.fail_melange_only "y"
+      Ppx_platform.fail_melange_only "bindings.ml:16:10"
     in
     ignore h
   
@@ -183,7 +200,7 @@ destructuring, in the discarded function and in the enclosing function
   > 
   > let enclosing = (~x, ~y=?, ~z=1, (a, b), {contents}, ()) => {
   >   let%melange_only handler = () => Js.log((x, y, z, a, b, contents));
-  >   ignore(handler);
+  >   ignore([@alert "-melange_only"] handler);
   > };
   > 
   > let enclosingSwitch = (~x, ~y=?, ~z=1, (a, b), ()) =>
@@ -220,7 +237,13 @@ destructuring, in the discarded function and in the enclosing function
      fun (a, b) ->
       fun { contents } ->
        fun () ->
-        let handler _ =
+        let (handler
+             [@alert
+               melange_only
+                 "This value only exists in the Melange build. Use it inside a \
+                  let%melange_only function, or a Melange branch of \
+                  match%platform."]) =
+         fun _ ->
           let _ = a in
           let _ = b in
           let _ = contents in
@@ -228,9 +251,9 @@ destructuring, in the discarded function and in the enclosing function
           let _ = y in
           let _ = z in
           Ppx_platform.fail_melange_only "handler"
-            [@@alert "-melange_only"]
+           [@@alert "-melange_only"]
         in
-        ignore handler
+        ignore (handler [@alert "-melange_only"])
   
   let enclosingSwitch ~x =
    fun ?y ->
@@ -248,14 +271,14 @@ destructuring, in the discarded function and in the enclosing function
    fun _ ->
     let _ = a in
     let _ = b in
-    Ppx_platform.fail_melange_only "<unknown>"
+    Ppx_platform.fail_melange_only "params.ml:23:26"
   
   let curried x =
    fun a b ->
     let _ = a in
     let _ = b in
     let _ = x in
-    Ppx_platform.fail_melange_only "a"
+    Ppx_platform.fail_melange_only "params.ml:24:16"
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only params_native.ml
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only params_js.ml
 
@@ -289,7 +312,7 @@ code
   > let useLocalHandler = () => {
   >   let (count, setCount) = React.useState(() => 0);
   >   let%melange_only onClick = _ => setCount(n => n + 1);
-  >   ignore(onClick);
+  >   ignore([@alert "-melange_only"] onClick);
   >   count;
   > };
   > EOF
@@ -302,7 +325,7 @@ code
     let count, setCount = React.useState (fun () -> 0) in
     React.useEffect0 (fun _ ->
         let _ = setCount in
-        Ppx_platform.fail_melange_only "<unknown>");
+        Ppx_platform.fail_melange_only "hooks.ml:4:4");
     count
   
   let useSwitchSetter () =
@@ -315,12 +338,18 @@ code
   
   let useLocalHandler () =
     let count, setCount = React.useState (fun () -> 0) in
-    let onClick _ =
+    let (onClick
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = setCount in
       Ppx_platform.fail_melange_only "onClick"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore onClick;
+    ignore (onClick [@alert "-melange_only"]);
     count
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only hooks_native.ml
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only hooks_js.ml
@@ -342,7 +371,7 @@ there: that is the accepted cost recorded in in_scope_idents_unsupported.t.
   > let localOpenBlock = x => {
   >   open M;
   >   let%melange_only handler = () => Js.log((x, y, topValue));
-  >   ignore(handler);
+  >   ignore([@alert "-melange_only"] handler);
   > };
   > 
   > let topLevelNotIgnored = () =>
@@ -366,16 +395,22 @@ there: that is the accepted cost recorded in in_scope_idents_unsupported.t.
     let open M in
     fun _ ->
       let _ = x in
-      Ppx_platform.fail_melange_only "<unknown>"
+      Ppx_platform.fail_melange_only "opens.ml:3:37"
   
   let localOpenBlock x =
     let open M in
-    let handler _ =
+    let (handler
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = x in
       Ppx_platform.fail_melange_only "handler"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore handler
+    ignore (handler [@alert "-melange_only"])
   
   let topLevelNotIgnored () = 0
   $ ocamlc -c -w +A-33-70 -warn-error +A -alert @melange_only opens_native.ml
@@ -391,7 +426,7 @@ not errors in this section.
   >     let x = 1;
   >     Js.log(x);
   >   };
-  >   ignore(handler);
+  >   ignore([@alert "-melange_only"] handler);
   > };
   > 
   > let shadowedByParam = x => {
@@ -413,16 +448,21 @@ not errors in this section.
   $ ./standalone.exe -impl shadow.ml -js | ocamlformat - --enable-outside-detected-project --impl > shadow_js.ml
   $ cat shadow_native.ml
   let shadowedByLet x =
-    let handler _ =
-      Ppx_platform.fail_melange_only "handler"
-        [@@alert "-melange_only"]
+    let (handler
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ -> Ppx_platform.fail_melange_only "handler"
+       [@@alert "-melange_only"]
     in
-    ignore handler
+    ignore (handler [@alert "-melange_only"])
   
   let shadowedByParam x =
     let h x =
       let _ = x in
-      Ppx_platform.fail_melange_only "x"
+      Ppx_platform.fail_melange_only "shadow.ml:5:32"
     in
     ignore h
   
@@ -433,13 +473,13 @@ not errors in this section.
                         ^
   Warning 27 [unused-var-strict]: unused variable x.
   
-  File "shadow_native.ml", line 8, characters 20-21:
-  8 | let shadowedByParam x =
-                          ^
+  File "shadow_native.ml", line 13, characters 20-21:
+  13 | let shadowedByParam x =
+                           ^
   Warning 27 [unused-var-strict]: unused variable x.
   
-  File "shadow_native.ml", line 15, characters 21-22:
-  15 | let shadowedInSwitch x = ()
+  File "shadow_native.ml", line 20, characters 21-22:
+  20 | let shadowedInSwitch x = ()
                             ^
   Warning 27 [unused-var-strict]: unused variable x.
   $ ocamlc -c -w +A-70 -alert -melange_only shadow_js.ml
@@ -499,17 +539,12 @@ The ppx removes the platform attributes from the items and expressions it
 keeps (see keptItem in section 1 and nativeOnlyExpr above):
 
   $ grep -n "keptItem\|droppedItem" bindings_native.ml bindings_js.ml
-  bindings_native.ml:88:let keptItem = 1
+  bindings_native.ml:100:let keptItem = 1
   bindings_js.ml:28:let droppedItem = Js.log 1
 
-Known issues
-
-[@melange_only] on a local open M.(...) drops only the open on Native and keeps
-the body, so names from the open are unbound. Expected: the same error as for
-other expressions in section 6. The ppx gets the same tree for
-`let open [@melange_only] M in e`, where dropping only the open is the
-documented behaviour (at_melange_only.t), so it cannot tell the two forms
-apart.
+[@melange_only] on a local open M.(...) is an error on Native too, as on the
+expressions above. `let open [@melange_only] M in e` gives the same tree.
+Dropping only the open would leave the names from M unbound in the body.
 
   $ cat > open_attr.re << 'EOF'
   > module M = {
@@ -526,10 +561,12 @@ apart.
     let y = 2
   end
   
-  let openAttr x = x + y
+  let openAttr x =
+    [%ocaml.error
+      "Don't use melange_only on expressions, use switch%platform instead"]
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only open_attr_native.ml
-  File "open_attr_native.ml", line 5, characters 21-22:
-  5 | let openAttr x = x + y
-                           ^
-  Error: Unbound value y
+  File "open_attr_native.ml", line 6, characters 4-15:
+  6 |   [%ocaml.error
+          ^^^^^^^^^^^
+  Error: Don't use melange_only on expressions, use switch%platform instead
   [2]

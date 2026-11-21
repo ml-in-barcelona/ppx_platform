@@ -37,5 +37,13 @@ Without -js flag, `function` cases become a stub that takes one argument and rai
   [@@warning "-32"]
   
   let make () =
-    let foo _ = Ppx_platform.fail_melange_only "foo" [@@alert "-melange_only"] in
+    let (foo
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ -> Ppx_platform.fail_melange_only "foo"
+       [@@alert "-melange_only"]
+    in
     ()

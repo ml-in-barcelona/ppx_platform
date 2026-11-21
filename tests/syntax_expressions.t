@@ -7,6 +7,11 @@ then compiles it on native and in js mode. The inputs have no interface file,
 so every case disables warning 70 (missing-mli); every top-level value is
 exported.
 
+A local let%melange_only stub has the melange_only alert, so a native use of
+it fails under -alert @melange_only (syntax_bindings.t section 7). The inputs
+that use a local stub outside a Melange branch mark the use with
+[@alert "-melange_only"].
+
   $ cat > ppx_platform.ml << 'EOF'
   > exception Melange_only of string
   > let fail_melange_only name = raise (Melange_only name)
@@ -44,7 +49,7 @@ redundant but harmless.
   >   try f ()
   >   with Failure msg ->
   >     let%melange_only report () = print_string msg in
-  >     ignore report
+  >     ignore report [@alert "-melange_only"]
   > 
   > let if_branches cond a b =
   >   if cond then (match%platform () with Native -> () | Melange -> print_int a)
@@ -97,7 +102,7 @@ redundant but harmless.
         let h _ =
           let _ = limit in
           let _ = v in
-          Ppx_platform.fail_melange_only "<unknown>"
+          Ppx_platform.fail_melange_only "control.ml:4:14"
         in
         ignore h
     | Some v -> ignore v
@@ -124,12 +129,18 @@ redundant but harmless.
   let try_with f =
     try f ()
     with Failure msg ->
-      let report _ =
+      let (report
+           [@alert
+             melange_only
+               "This value only exists in the Melange build. Use it inside a \
+                let%melange_only function, or a Melange branch of \
+                match%platform."]) =
+       fun _ ->
         let _ = msg in
         Ppx_platform.fail_melange_only "report"
-          [@@alert "-melange_only"]
+         [@@alert "-melange_only"]
       in
-      ignore report
+      (ignore report [@alert "-melange_only"])
   
   let if_branches cond a b =
     if cond then
@@ -172,7 +183,7 @@ redundant but harmless.
     for j = 2 downto 0 do
       let h _ =
         let _ = j in
-        Ppx_platform.fail_melange_only "<unknown>"
+        Ppx_platform.fail_melange_only "control.ml:52:12"
       in
       ignore h
     done
@@ -223,7 +234,7 @@ values and get none.
   > 
   > let record_field r =
   >   let%melange_only get () = r.name in
-  >   ignore get
+  >   ignore get [@alert "-melange_only"]
   > 
   > let record_setfield r value =
   >   match%platform () with Native -> () | Melange -> r.count <- value
@@ -300,12 +311,18 @@ values and get none.
     base
   
   let record_field r =
-    let get _ =
+    let (get
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = r in
       Ppx_platform.fail_melange_only "get"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore get
+    (ignore get [@alert "-melange_only"])
   
   let record_setfield r value =
     let _ = r in
@@ -447,7 +464,7 @@ discarded code get an ignore, as in an immediate object.
       method handler _ =
         let _ = label in
         let _ = self in
-        Ppx_platform.fail_melange_only "<unknown>"
+        Ppx_platform.fail_melange_only "objects.ml:16:21"
     end
   
   class counter (init : int) =
@@ -468,7 +485,7 @@ discarded code get an ignore, as in an immediate object.
         fun suffix ->
           let _ = prefix in
           let _ = suffix in
-          Ppx_platform.fail_melange_only "suffix"
+          Ppx_platform.fail_melange_only "objects.ml:34:6"
     end
   
   let object_in_discarded x =
@@ -621,7 +638,7 @@ kept unchanged.
   > 
   > let other_extension_in_fun x =
   >   let%melange_only f () = [%bar.baz x] in
-  >   ignore f
+  >   ignore f [@alert "-melange_only"]
   > 
   > let melange_only_attr_in_melange_branch x =
   >   match%platform () with Native -> 0 | Melange -> (x + 1 [@melange_only])
@@ -635,12 +652,18 @@ kept unchanged.
     0
   
   let other_extension_in_fun x =
-    let f _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = x in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f
+    (ignore f [@alert "-melange_only"])
   
   let melange_only_attr_in_melange_branch x =
     let _ = x in
@@ -649,6 +672,7 @@ kept unchanged.
   $ grep -n "%foo\|%bar\|melange_only" extensions_js.ml
   1:let other_extension x = [%foo x]
   4:  let f () = [%bar.baz x] in
+  5:  (ignore f [@alert "-melange_only"])
   7:let melange_only_attr_in_melange_branch x = x + 1
 
 6. On kept code, [@melange_only] on an expression on native, [@native_only] on
@@ -825,13 +849,11 @@ gets an ignore, so native compiles.
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only class_self_native.ml
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only class_self_js.ml
 
-Known issues
-
-A. In a class, a method that is [%melange_only fun x -> ...] without a method
-type annotation loses the parameter type on native, and the class fails with
-an unbound type variable. A type constraint inside the extension does not help:
-the stub drops it, because it can name types that exist only in the Melange
-build. The method type annotation in section 3 compiles.
+10. Limit: in a class, a method that is [%melange_only fun x -> ...] without a
+method type annotation loses the parameter type on native, and the class fails
+with an unbound type variable. A type constraint inside the extension does not
+help: the stub drops it, because it can name types that exist only in the
+Melange build. Workaround: add a method type annotation, as in section 3.
 
   $ cat > class_method_fun.ml << 'EOF'
   > class class_untyped_method_fun =
@@ -847,7 +869,7 @@ build. The method type annotation in section 3 compiles.
     object
       method show suffix =
         let _ = suffix in
-        Ppx_platform.fail_melange_only "suffix"
+        Ppx_platform.fail_melange_only "class_method_fun.ml:3:18"
     end
   $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only class_method_fun_native.ml
   File "class_method_fun_native.ml", lines 1-6, characters 0-5:
@@ -855,7 +877,7 @@ build. The method type annotation in section 3 compiles.
   2 |   object
   3 |     method show suffix =
   4 |       let _ = suffix in
-  5 |       Ppx_platform.fail_melange_only "suffix"
+  5 |       Ppx_platform.fail_melange_only "class_method_fun.ml:3:18"
   6 |   end
   Error: Some type variables are unbound in this type:
            class class_untyped_method_fun : object method show : 'a -> 'b end
@@ -863,10 +885,44 @@ build. The method type annotation in section 3 compiles.
   [2]
   $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only class_method_fun_js.ml
 
-B. [@melange_only] on a pattern makes the pattern `_` on Native. In a parameter
-this drops a Melange-only name (see at_melange_only.t), but in a match case the
-case then matches every value, so `B` gives 1 on Native:
+11. A platform attribute on the pattern of a match, function or try case is an
+error in the build that drops it. Making the pattern `_` would make the case
+match every value. On function parameters and let bindings the pattern becomes
+`_` (see at_melange_only.t).
 
-  $ printf 'let pat = function `A [@melange_only] -> 1 | `B -> 2\n' > pattern_attr.ml
-  $ ./standalone.exe -impl pattern_attr.ml | ocamlformat - --enable-outside-detected-project --impl
-  let pat = function _ -> 1 | `B -> 2
+  $ cat > case_pattern.ml << 'EOF'
+  > let in_function = function `A [@melange_only] -> 1 | `B -> 2
+  > let in_match x = match x with `A -> 1 | `B [@native_only] -> 2
+  > let in_try f = try f () with Not_found [@melange_only] -> 0
+  > EOF
+
+  $ ./standalone.exe -impl case_pattern.ml | ocamlformat - --enable-outside-detected-project --impl
+  let in_function = function
+    | [%ocaml.error
+        "Don't use melange_only on match case patterns, use switch%platform \
+         instead"] ->
+        1
+    | `B -> 2
+  
+  let in_match x = match x with `A -> 1 | `B -> 2
+  
+  let in_try f =
+    try f ()
+    with
+    | [%ocaml.error
+        "Don't use melange_only on match case patterns, use switch%platform \
+         instead"]
+    ->
+      0
+  $ ./standalone.exe -impl case_pattern.ml -js | ocamlformat - --enable-outside-detected-project --impl
+  let in_function = function `A -> 1 | `B -> 2
+  
+  let in_match x =
+    match x with
+    | `A -> 1
+    | [%ocaml.error
+        "Don't use native_only on match case patterns, use switch%platform \
+         instead"] ->
+        2
+  
+  let in_try f = try f () with Not_found -> 0

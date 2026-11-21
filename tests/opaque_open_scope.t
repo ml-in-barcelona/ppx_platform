@@ -3,6 +3,11 @@ scope. Ext stands for a library with a different Native and Melange build. Only
 names bound locally in the enclosing expression get an ignore, so no ignore
 names a module path, a top-level value, or a name that comes from an open.
 
+A local let%melange_only stub has the melange_only alert, so a native use of
+it fails under -alert @melange_only (syntax_bindings.t section 7). The inputs
+that use a local stub outside a Melange branch mark the use with
+[@alert "-melange_only"].
+
   $ cat > ppx_platform.ml << 'EOF'
   > exception Melange_only of string
   > let fail_melange_only name = raise (Melange_only name)
@@ -25,7 +30,7 @@ names a module path, a top-level value, or a name that comes from an open.
   > let melange_only_let_open () =
   >   let open Ext in
   >   let%melange_only g () = M.x in
-  >   ignore g
+  >   ignore g [@alert "-melange_only"]
   > 
   > let match_local_open () =
   >   Ext.(match%platform () with Native -> () | Melange -> ignore M.x)
@@ -33,7 +38,7 @@ names a module path, a top-level value, or a name that comes from an open.
   > let melange_only_local_open () =
   >   Ext.(
   >     let%melange_only g () = M.x in
-  >     ignore g)
+  >     ignore g [@alert "-melange_only"])
   > 
   > let bound_after_open () =
   >   let open Ext in
@@ -109,7 +114,7 @@ names a module path, a top-level value, or a name that comes from an open.
   >   let limit = 10 in
   >   let open Stdlib.List in
   >   let%melange_only g () = length items + limit in
-  >   ignore g
+  >   ignore g [@alert "-melange_only"]
   > 
   > module List = struct
   >   include Stdlib.List
@@ -123,17 +128,17 @@ names a module path, a top-level value, or a name that comes from an open.
 
   $ ./standalone.exe -impl input.ml | ocamlformat - --enable-outside-detected-project --impl > native/input.ml
   $ grep -n "let _ = \|let module _" native/input.ml
-  26:  let _ = z in
-  104:  let _ = items in
-  105:  let _ = limit in
-  111:  let _ = items in
-  112:  let _ = limit in
-  118:  let _ = items in
-  119:  let _ = limit in
-  126:    let _ = items in
-  127:    let _ = limit in
-  142:  let _ = items in
-  143:  let _ = limit in
+  42:  let _ = z in
+  120:  let _ = items in
+  121:  let _ = limit in
+  127:  let _ = items in
+  128:  let _ = limit in
+  134:  let _ = items in
+  135:  let _ = limit in
+  148:    let _ = items in
+  149:    let _ = limit in
+  164:  let _ = items in
+  165:  let _ = limit in
   $ ocamlc -c -w +A-33-44-45-70 -warn-error +A -alert @melange_only -I native native/input.ml
 
   $ ./standalone.exe -impl input.ml -js | ocamlformat - --enable-outside-detected-project --impl > js/input.ml

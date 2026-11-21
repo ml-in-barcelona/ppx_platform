@@ -53,10 +53,16 @@
   $ ./standalone.exe -impl input.ml | refmt --parse ml --print re
   let make = () => {
     [@alert "-melange_only"]
-    let discard = value => {
-      let _ = value;
-      Ppx_platform.fail_melange_only("discard");
-    };
+    let [@alert
+          melange_only(
+            "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.",
+          )
+        ]
+        discard =
+      value => {
+        let _ = value;
+        Ppx_platform.fail_melange_only("discard");
+      };
     ();
   };
   [@warning "-32"]

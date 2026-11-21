@@ -228,7 +228,10 @@ Ppat_constraint
   $ ./standalone.exe -impl input_constr.ml | ocamlformat - --enable-outside-detected-project --impl
   let foo ~on:_ ?opt:(_ = 42) = 0
 
-Pexp_open drops the local open and keeps the body
+Pexp_open with [@melange_only] is an error on Native, as on other expressions.
+`let open [@melange_only] M in e` and `[@melange_only] M.(e)` give the same
+tree. Dropping only the open would leave names from M unbound in the body. On
+Melange the open stays.
 
   $ cat > input_pexp_open.ml << EOF
   > let f () =
@@ -237,7 +240,9 @@ Pexp_open drops the local open and keeps the body
   > EOF
 
   $ ./standalone.exe -impl input_pexp_open.ml | ocamlformat - --enable-outside-detected-project --impl
-  let f () = 42
+  let f () =
+    [%ocaml.error
+      "Don't use melange_only on expressions, use switch%platform instead"]
 
   $ ./standalone.exe -impl input_pexp_open.ml -js | ocamlformat - --enable-outside-detected-project --impl
   let f () =
@@ -245,6 +250,11 @@ Pexp_open drops the local open and keeps the body
     42
 
   $ ./standalone.exe -impl input_pexp_open.ml > input_pexp_open_server.ml && ocamlc -c input_pexp_open_server.ml
+  File "input_pexp_open_server.ml", line 2, characters 4-15:
+  2 |   [%ocaml.error
+          ^^^^^^^^^^^
+  Error: Don't use melange_only on expressions, use switch%platform instead
+  [2]
 
   $ cat > input_pexp_open.re << EOF
   > let f = () => {
@@ -254,7 +264,9 @@ Pexp_open drops the local open and keeps the body
   > EOF
   $ refmt --print ml input_pexp_open.re > input_pexp_open_re.ml
   $ ./standalone.exe -impl input_pexp_open_re.ml | ocamlformat - --enable-outside-detected-project --impl
-  let f () = 42
+  let f () =
+    [%ocaml.error
+      "Don't use melange_only on expressions, use switch%platform instead"]
 
 Pexp_* should be throw an error
 

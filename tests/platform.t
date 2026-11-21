@@ -169,7 +169,7 @@ let%melange_only and [%melange_only ...]
   
   let on_click event =
     let _ = event in
-    Ppx_platform.fail_melange_only "event"
+    Ppx_platform.fail_melange_only "ext.ml:4:15"
   
   let not_a_function =
     [%ocaml.error

@@ -8,6 +8,11 @@ used in both the kept and the discarded code gets none.
 The inputs have no .mli, so every top-level value is exported. The compile
 commands add -70 to -w +A only to silence the missing-interface warning.
 
+A local let%melange_only stub has the melange_only alert, so a native use of
+it fails under -alert @melange_only (section 7). The inputs that use a local
+stub outside a Melange branch mark the use with
+[@alert "-melange_only"].
+
   $ cat > ppx_platform.ml << 'EOF'
   > exception Melange_only of string
   > let fail_melange_only name = raise (Melange_only name)
@@ -198,38 +203,62 @@ and a top-level let%melange_only rec ... and ...
     a + c
   
   let mel_only_local x y =
-    let f _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = x in
       let _ = y in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    let _ = f in
+    let _ = (f [@alert "-melange_only"]) in
     y
   
   let mel_only_and x y =
-    let f _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = x in
       Ppx_platform.fail_melange_only "f"
     [@@alert "-melange_only"]
-    and g _ =
+    and (g
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = y in
       Ppx_platform.fail_melange_only "g"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    let _ = f in
-    let _ = g in
+    let _ = (f [@alert "-melange_only"]) in
+    let _ = (g [@alert "-melange_only"]) in
     0
   
   let mel_only_rec n =
-    let rec down i =
+    let rec (down
+             [@alert
+               melange_only
+                 "This value only exists in the Melange build. Use it inside a \
+                  let%melange_only function, or a Melange branch of \
+                  match%platform."]) =
+     fun i ->
       let _ = down in
       let _ = i in
       let _ = n in
       Ppx_platform.fail_melange_only "down"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    let _ = down in
+    let _ = (down [@alert "-melange_only"]) in
     let _ = n in
     0
   
@@ -237,24 +266,36 @@ and a top-level let%melange_only rec ... and ...
     let h _ =
       let _ = x in
       let _ = y in
-      Ppx_platform.fail_melange_only "<unknown>"
+      Ppx_platform.fail_melange_only "lets_input.ml:80:10"
     in
     ignore h;
     y
   
   let mel_only_rec_and n =
-    let rec even i =
+    let rec (even
+             [@alert
+               melange_only
+                 "This value only exists in the Melange build. Use it inside a \
+                  let%melange_only function, or a Melange branch of \
+                  match%platform."]) =
+     fun i ->
       let _ = i in
       let _ = odd in
       Ppx_platform.fail_melange_only "even"
     [@@alert "-melange_only"]
-    and odd i =
+    and (odd
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun i ->
       let _ = even in
       let _ = i in
       Ppx_platform.fail_melange_only "odd"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    let _ = even in
+    let _ = (even [@alert "-melange_only"]) in
     let _ = n in
     false
   
@@ -367,7 +408,7 @@ is harmless.
   > 
   > let p_mel_only_let (lazy lz) (q1, q2) =
   >   let%melange_only f () = lz + q1 + q2 in
-  >   ignore f;
+  >   ignore f [@alert "-melange_only"];
   >   q1
   > EOF
 
@@ -455,20 +496,26 @@ is harmless.
     let h _ =
       let _ = a in
       let _ = b in
-      Ppx_platform.fail_melange_only "<unknown>"
+      Ppx_platform.fail_melange_only "patterns_input.ml:64:10"
     in
     ignore h;
     a
   
   let p_mel_only_let (lazy lz) (q1, q2) =
-    let f _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = lz in
       let _ = q1 in
       let _ = q2 in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f;
+    ignore f [@alert "-melange_only"];
     q1
 
 3. The discarded code binds a name but still reads the outer one: the RHS of
@@ -703,7 +750,7 @@ inner `x`. The `_x` case does not warn.
   > 
   > let s_mel_only_let x =
   >   let%melange_only f () = match Some 1 with Some x -> x | None -> 0 in
-  >   ignore f
+  >   ignore f [@alert "-melange_only"]
   > EOF
 
   $ ./standalone.exe -impl shadow_input.ml | ocamlformat - --enable-outside-detected-project --impl > shadow_native.ml
@@ -840,3 +887,144 @@ struct is unused too and warns 32.
   8 | let open_struct_shadows_local x =
                                     ^
   Warning 27 [unused-var-strict]: unused variable x.
+
+7. A let%melange_only stub carries the melange_only alert on the names it
+binds, so native code that uses it fails under -alert @melange_only. This
+holds for a local stub, and for a top-level binding whose pattern has a type
+constraint or an alias: the alert goes on each name in the pattern, after the
+attributes the pattern already has. The ignores that the ppx adds, and uses in
+the Melange branch of match%platform, do not trigger the alert.
+
+  $ cat > alert_input.ml << 'EOF'
+  > let%melange_only (typed : int -> unit) = fun x -> print_int x
+  > let%melange_only ((aliased as alias) : int -> unit) = fun x -> print_int x
+  > let%melange_only ((attributed [@user]) : int -> unit) = fun x -> print_int x
+  > 
+  > let top_use () =
+  >   typed 1;
+  >   aliased 2;
+  >   alias 3;
+  >   attributed 4
+  > 
+  > let local_use x =
+  >   let%melange_only f y = print_int (x + y) in
+  >   f 1
+  > 
+  > let local_in_melange_branch x =
+  >   let%melange_only f y = print_int (x + y) in
+  >   match%platform () with Native -> () | Melange -> f 1
+  > EOF
+
+  $ ./standalone.exe -impl alert_input.ml | ocamlformat - --enable-outside-detected-project --impl > alert_native.ml
+  $ ./standalone.exe -impl alert_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > alert_js.ml
+  $ cat alert_native.ml
+  let (typed
+       [@alert
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) :
+      int -> unit =
+   (fun x ->
+    let _ = x in
+    Ppx_platform.fail_melange_only "alert_input.ml:1:17")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
+  
+  let (((aliased
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        as alias)
+       [@alert
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) :
+      int -> unit =
+   (fun x ->
+    let _ = x in
+    Ppx_platform.fail_melange_only "alert_input.ml:2:17")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
+  
+  let (attributed
+       [@user]
+       [@alert
+         melange_only
+           "This value only exists in the Melange build. Use it inside a \
+            let%melange_only function, or a Melange branch of match%platform."]) :
+      int -> unit =
+   (fun x ->
+    let _ = x in
+    Ppx_platform.fail_melange_only "alert_input.ml:3:17")
+    [@alert "-melange_only"]
+  [@@warning "-32"]
+  
+  let top_use () =
+    typed 1;
+    aliased 2;
+    alias 3;
+    attributed 4
+  
+  let local_use x =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun y ->
+      let _ = x in
+      let _ = y in
+      Ppx_platform.fail_melange_only "f"
+       [@@alert "-melange_only"]
+    in
+    f 1
+  
+  let local_in_melange_branch x =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun y ->
+      let _ = x in
+      let _ = y in
+      Ppx_platform.fail_melange_only "f"
+       [@@alert "-melange_only"]
+    in
+    let _ = (f [@alert "-melange_only"]) in
+    ()
+  $ ocamlc -c -w +A-70 -warn-error +A -alert @melange_only alert_native.ml
+  File "alert_native.ml", line 44, characters 2-7:
+  44 |   typed 1;
+         ^^^^^
+  Error (alert melange_only): typed
+  This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.
+  
+  File "alert_native.ml", line 45, characters 2-9:
+  45 |   aliased 2;
+         ^^^^^^^
+  Error (alert melange_only): aliased
+  This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.
+  
+  File "alert_native.ml", line 46, characters 2-7:
+  46 |   alias 3;
+         ^^^^^
+  Error (alert melange_only): alias
+  This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.
+  
+  File "alert_native.ml", line 47, characters 2-12:
+  47 |   attributed 4
+         ^^^^^^^^^^
+  Error (alert melange_only): attributed
+  This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.
+  
+  File "alert_native.ml", line 62, characters 2-3:
+  62 |   f 1
+         ^
+  Error (alert melange_only): f
+  This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of match%platform.
+  [2]
+  $ ocamlc -c -w +A-70 -warn-error +A -alert -melange_only alert_js.ml

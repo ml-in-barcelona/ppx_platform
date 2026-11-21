@@ -5,6 +5,11 @@ Each input compiles in native mode and in Melange mode (-js) under
 left in the native output fails to compile. The Melange build uses a small Js
 stub in mel/. Each input has an .mli that fixes the types of the native output.
 
+A local let%melange_only stub has the melange_only alert, so a native use of
+it fails under -alert @melange_only (syntax_bindings.t section 7). The inputs
+that use a local stub outside a Melange branch mark the use with
+[@alert "-melange_only"].
+
   $ cat > ppx_platform.ml << 'EOF'
   > exception Melange_only of string
   > let fail_melange_only name = raise (Melange_only name)
@@ -232,42 +237,42 @@ an enclosing local, also in a parameter after the first, keep that local used.
   >   register [%melange_only fun () -> Js.log (add_n 1)]
   > let labelled_enclosing ~x ~y =
   >   let%melange_only f () = Js.log y in
-  >   ignore f;
+  >   ignore f [@alert "-melange_only"];
   >   x
   > let optional_enclosing ?x ?(y = 2) () =
   >   let%melange_only f () = Js.log (x, y) in
-  >   ignore f
+  >   ignore f [@alert "-melange_only"]
   > let newtype_enclosing (type a) (v : a) : a =
   >   let%melange_only f (w : a) = Js.log w in
-  >   ignore f;
+  >   ignore f [@alert "-melange_only"];
   >   v
   > let cases_enclosing = function
   >   | Some n ->
   >       let%melange_only f () = Js.log n in
-  >       ignore f
+  >       ignore f [@alert "-melange_only"]
   >   | None -> ()
   > let nested_enclosing a = fun b ->
   >   let%melange_only f () = Js.log (a, b) in
-  >   ignore f
+  >   ignore f [@alert "-melange_only"]
   > let local_forms n =
   >   let%melange_only explicit = fun x -> Js.log (n, x) in
   >   let%melange_only annotated : int -> unit = fun x -> Js.log (n, x) in
   >   let%melange_only ret_constraint x : unit = Js.log (n, x) in
-  >   ignore (explicit, annotated, ret_constraint)
+  >   ignore (explicit, annotated, ret_constraint) [@alert "-melange_only"]
   > let local_with_attrs x =
   >   let%melange_only f () = Js.log x [@@inline] in
-  >   ignore f
+  >   ignore f [@alert "-melange_only"]
   > let default_outer_local x =
   >   let base = x + 1 in
   >   let%melange_only f ?(y = base) () = Js.log y in
-  >   ignore f
+  >   ignore f [@alert "-melange_only"]
   > let later_default x =
   >   let base = x + 1 in
   >   let%melange_only f () ?(y = base) () = Js.log y in
-  >   ignore f
+  >   ignore f [@alert "-melange_only"]
   > let later_labelled_default x =
   >   let%melange_only f ~a ?(b = a + x) () = Js.log (a, b) in
-  >   ignore f
+  >   ignore f [@alert "-melange_only"]
   > let platform_params ~x ?(y = 0) (a, b) =
   >   match%platform () with
   >   | Native -> x
@@ -284,37 +289,37 @@ an enclosing local, also in a parameter after the first, keep that local used.
   let as_argument x =
     register (fun _ ->
         let _ = x in
-        Ppx_platform.fail_melange_only "<unknown>")
+        Ppx_platform.fail_melange_only "enclosing_input.ml:3:29")
   
   let as_record_field label =
     {
       on_click =
         (fun _ ->
           let _ = label in
-          Ppx_platform.fail_melange_only "<unknown>");
+          Ppx_platform.fail_melange_only "enclosing_input.ml:5:15");
       on_key =
         (fun key ->
           let _ = key in
           let _ = label in
-          Ppx_platform.fail_melange_only "key");
+          Ppx_platform.fail_melange_only "enclosing_input.ml:6:13");
     }
   
   let in_tuple n =
     ( (fun _ ->
         let _ = n in
-        Ppx_platform.fail_melange_only "<unknown>"),
+        Ppx_platform.fail_melange_only "enclosing_input.ml:7:18"),
       0 )
   
   let returns_melange_fun a =
    fun b ->
     let _ = a in
     let _ = b in
-    Ppx_platform.fail_melange_only "b"
+    Ppx_platform.fail_melange_only "enclosing_input.ml:8:28"
   
   let constrained_arg x =
     register (fun _ ->
         let _ = x in
-        Ppx_platform.fail_melange_only "<unknown>")
+        Ppx_platform.fail_melange_only "enclosing_input.ml:9:33")
   
   let add a b = a + b
   
@@ -322,113 +327,185 @@ an enclosing local, also in a parameter after the first, keep that local used.
     let add_n = add n in
     register (fun _ ->
         let _ = add_n in
-        Ppx_platform.fail_melange_only "<unknown>")
+        Ppx_platform.fail_melange_only "enclosing_input.ml:13:11")
   
   let labelled_enclosing ~x ~y =
-    let f _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = y in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f;
+    ignore f [@alert "-melange_only"];
     x
   
   let optional_enclosing ?x ?(y = 2) () =
-    let f _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = x in
       let _ = y in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f
+    (ignore f [@alert "-melange_only"])
   
   let newtype_enclosing (type a) (v : a) : a =
-    let f w =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun w ->
       let _ = w in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f;
+    ignore f [@alert "-melange_only"];
     v
   
   let cases_enclosing = function
     | Some n ->
-        let f _ =
+        let (f
+             [@alert
+               melange_only
+                 "This value only exists in the Melange build. Use it inside a \
+                  let%melange_only function, or a Melange branch of \
+                  match%platform."]) =
+         fun _ ->
           let _ = n in
           Ppx_platform.fail_melange_only "f"
-            [@@alert "-melange_only"]
+           [@@alert "-melange_only"]
         in
-        ignore f
+        (ignore f [@alert "-melange_only"])
     | None -> ()
   
   let nested_enclosing a =
    fun b ->
-    let f _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = a in
       let _ = b in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f
+    (ignore f [@alert "-melange_only"])
   
   let local_forms n =
-    let explicit x =
+    let (explicit
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun x ->
       let _ = n in
       let _ = x in
       Ppx_platform.fail_melange_only "explicit"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    let annotated x =
+    let (annotated
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun x ->
       let _ = n in
       let _ = x in
       Ppx_platform.fail_melange_only "annotated"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    let ret_constraint x =
+    let (ret_constraint
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun x ->
       let _ = n in
       let _ = x in
       Ppx_platform.fail_melange_only "ret_constraint"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore (explicit, annotated, ret_constraint)
+    (ignore (explicit, annotated, ret_constraint) [@alert "-melange_only"])
   
   let local_with_attrs x =
-    let f _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ->
       let _ = x in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"] [@@inline]
+       [@@alert "-melange_only"] [@@inline]
     in
-    ignore f
+    (ignore f [@alert "-melange_only"])
   
   let default_outer_local x =
     let base = x + 1 in
-    let f ?y _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun ?y _ ->
       let _ = base in
       let _ = y in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f
+    (ignore f [@alert "-melange_only"])
   
   let later_default x =
     let base = x + 1 in
-    let f _ ?y _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun _ ?y _ ->
       let _ = base in
       let _ = y in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f
+    (ignore f [@alert "-melange_only"])
   
   let later_labelled_default x =
-    let f ~a ?b _ =
+    let (f
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun ~a ?b _ ->
       let _ = a in
       let _ = b in
       let _ = x in
       Ppx_platform.fail_melange_only "f"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
-    ignore f
+    (ignore f [@alert "-melange_only"])
   
   let platform_params ~x ?(y = 0) (a, b) =
     let _ = a in
@@ -583,13 +660,13 @@ build.
   > let register (f : int -> unit) = ignore f
   > let local_ident_rhs g =
   >   let%melange_only f = g in
-  >   register f
+  >   register f [@alert "-melange_only"]
   > let local_function n =
   >   let%melange_only f = function 0 -> Js.log n | _ -> () in
-  >   register f
+  >   register f [@alert "-melange_only"]
   > let local_newtype n =
   >   let%melange_only f (type a) (x : a) = Js.log (n, x) in
-  >   register f
+  >   register f [@alert "-melange_only"]
   > let ext_function n = register [%melange_only function 0 -> Js.log n | _ -> ()]
   > let ext_newtype n = register [%melange_only fun (type a) (x : a) -> Js.log (n, x)]
   > let ext_coerce n = register [%melange_only (fun x -> Js.log (n, x) :> int -> unit)]
@@ -597,12 +674,12 @@ build.
   $ ./standalone.exe -impl local_stubs_input.ml | ocamlformat - --enable-outside-detected-project --impl > local_stubs_native.ml
   $ ./standalone.exe -impl local_stubs_input.ml -js | ocamlformat - --enable-outside-detected-project --impl > local_stubs_js.ml
   $ grep -n "Obj.magic\|fail_melange_only\|:>" local_stubs_native.ml
-  6:    Ppx_platform.fail_melange_only "f"
-  14:    Ppx_platform.fail_melange_only "f"
-  23:    Ppx_platform.fail_melange_only "f"
-  31:      Ppx_platform.fail_melange_only "<unknown>")
-  37:      Ppx_platform.fail_melange_only "<unknown>")
-  43:      Ppx_platform.fail_melange_only "x")
+  12:    Ppx_platform.fail_melange_only "f"
+  26:    Ppx_platform.fail_melange_only "f"
+  41:    Ppx_platform.fail_melange_only "f"
+  49:      Ppx_platform.fail_melange_only "local_stubs_input.ml:11:30")
+  55:      Ppx_platform.fail_melange_only "local_stubs_input.ml:12:29")
+  61:      Ppx_platform.fail_melange_only "local_stubs_input.ml:13:28")
   $ cp local_stubs.mli local_stubs_native.mli
   $ cp local_stubs.mli local_stubs_js.mli
   $ ocamlc -c -w +A -warn-error +A -alert @melange_only local_stubs_native.mli
@@ -619,7 +696,7 @@ Calling an identifier stub raises Melange_only:
   > EOF
   $ cat > ident_call_input.ml << 'EOF'
   > let g (x : int) = ignore x
-  > let make () = let%melange_only f = g in f 1
+  > let make () = let%melange_only f = g in f 1 [@alert "-melange_only"]
   > let ext () = [%melange_only g] 1
   > let () = try make () with Ppx_platform.Melange_only _ -> print_endline "make raised"
   > let () = try ext () with Ppx_platform.Melange_only _ -> print_endline "ext raised"
@@ -672,19 +749,17 @@ interfaces differ in the type of `patterns`:
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I mel melange_types_js.mli
   $ ocamlc -c -w +A -warn-error +A -alert -melange_only -I . -I mel melange_types_js.ml
 
-Known issues
-
-The output below records the current, wrong behaviour.
-
-9. The fail_melange_only message of an anonymous `[%melange_only fun ...]` is
-the name of its first parameter, or "<unknown>" when that parameter is not a
-plain variable. A parameter name does not identify the function. Expected: one
-stable name. The lines come from section 3.
+9. A stub without a binding name, such as an anonymous
+`[%melange_only fun ...]`, gets the source location of the extension as its
+fail_melange_only message, in the form file:line:column. A binding whose
+pattern is not a plain name, such as `(f : t)` or `(f as g)`, gets the
+location of the pattern (see syntax_bindings.t section 7). The lines come
+from section 3.
 
   $ grep -n "fail_melange_only" enclosing_native.ml | head -6
-  8:      Ppx_platform.fail_melange_only "<unknown>")
-  15:        Ppx_platform.fail_melange_only "<unknown>");
-  20:        Ppx_platform.fail_melange_only "key");
-  26:      Ppx_platform.fail_melange_only "<unknown>"),
-  33:  Ppx_platform.fail_melange_only "b"
-  38:      Ppx_platform.fail_melange_only "<unknown>")
+  8:      Ppx_platform.fail_melange_only "enclosing_input.ml:3:29")
+  15:        Ppx_platform.fail_melange_only "enclosing_input.ml:5:15");
+  20:        Ppx_platform.fail_melange_only "enclosing_input.ml:6:13");
+  26:      Ppx_platform.fail_melange_only "enclosing_input.ml:7:18"),
+  33:  Ppx_platform.fail_melange_only "enclosing_input.ml:8:28"
+  38:      Ppx_platform.fail_melange_only "enclosing_input.ml:9:33")

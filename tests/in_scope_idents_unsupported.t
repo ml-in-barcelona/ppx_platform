@@ -226,10 +226,9 @@ warnings on native (0 warnings under -w +A):
   > 
   > let%melange_only use_ext_open () = from_ext_open ()
   > 
-  > (* 2. Local let open -> [@melange_only] drops the open and keeps the body *)
+  > (* 2. Local let open -> move the open into the melange_only function *)
   > let use_local_open () =
-  >   let open [@melange_only] Ext_helpers in
-  >   let f = [%melange_only fun () -> from_ext_local_open ()] in
+  >   let f = [%melange_only fun () -> Ext_helpers.(from_ext_local_open ())] in
   >   ignore f
   > 
   > (* 3. open of local alias -> [@@melange_only] on both *)
@@ -293,3 +292,18 @@ warnings on native (0 warnings under -w +A):
   $ ./standalone.exe -impl resolved_input.ml | ocamlformat - --enable-outside-detected-project --impl > resolved.ml
   $ ocamlc -c -w +A resolved.mli
   $ ocamlc -c -w +A -I . resolved.ml
+
+[@melange_only] on a local open is an error on Native, as on other
+expressions. Move the open into the melange_only function, as in case 2 above:
+
+  $ cat > local_open_attr.ml << 'EOF'
+  > let use_local_open () =
+  >   let open [@melange_only] Ext_helpers in
+  >   let f = [%melange_only fun () -> from_ext_local_open ()] in
+  >   ignore f
+  > EOF
+
+  $ ./standalone.exe -impl local_open_attr.ml | ocamlformat - --enable-outside-detected-project --impl
+  let use_local_open () =
+    [%ocaml.error
+      "Don't use melange_only on expressions, use switch%platform instead"]

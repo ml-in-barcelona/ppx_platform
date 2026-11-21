@@ -127,18 +127,24 @@
   [@@warning "-32"]
   
   let make () =
-    let inner a b =
+    let (inner
+         [@alert
+           melange_only
+             "This value only exists in the Melange build. Use it inside a \
+              let%melange_only function, or a Melange branch of match%platform."])
+        =
+     fun a b ->
       let _ = a in
       let _ = b in
       Ppx_platform.fail_melange_only "inner"
-        [@@alert "-melange_only"]
+       [@@alert "-melange_only"]
     in
     inner
   
   let expression a b =
     let _ = a in
     let _ = b in
-    Ppx_platform.fail_melange_only "a"
+    Ppx_platform.fail_melange_only "input.ml:19:17"
   
   module type S = sig
     val x : int
@@ -235,7 +241,7 @@ Partial application does not raise; full application raises Melange_only
   cases full: raises cases
   inner partial: no raise
   expression partial: no raise
-  expression full: raises a
+  expression full: raises input.ml:19:17
 
 The -js output type-checks against the same signature
 

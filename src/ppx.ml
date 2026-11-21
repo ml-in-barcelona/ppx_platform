@@ -55,8 +55,14 @@ let error_extension ~loc message =
   ({ txt = "ocaml.error"; loc }, PStr [ Builder.pstr_eval ~loc (Builder.estring ~loc message) [] ])
 
 module Melange_only = struct
-  let unknown_name = "<unknown>"
-  let function_name pattern = match pattern.ppat_desc with Ppat_var { txt = name; _ } -> name | _ -> unknown_name
+  let location_name loc =
+    let pos = loc.loc_start in
+    Printf.sprintf "%s:%d:%d" pos.pos_fname pos.pos_lnum (pos.pos_cnum - pos.pos_bol)
+
+  let function_name pattern =
+    match pattern.ppat_desc with Ppat_var { txt = name; _ } -> name | _ -> location_name pattern.ppat_loc
+
+  let local_stubs = ref Scope.String_set.empty
 
   let error_only_works_on ~loc =
     [%expr
@@ -106,7 +112,13 @@ module Melange_only = struct
     List.fold_right
       (fun name acc ->
         Builder.pexp_let ~loc Nonrecursive
-          [ Builder.value_binding ~loc ~pat:(Builder.ppat_any ~loc) ~expr:(Builder.evar ~loc name) ]
+          [
+            Builder.value_binding ~loc ~pat:(Builder.ppat_any ~loc)
+              ~expr:
+                (if Scope.String_set.mem name !local_stubs then
+                   { (Builder.evar ~loc name) with pexp_attributes = [ remove_alert_only ~loc ] }
+                 else Builder.evar ~loc name);
+          ]
           acc)
       (Scope.String_set.elements (Scope.String_set.union kept_bindings outer_refs))
       body
@@ -168,19 +180,6 @@ module Melange_only = struct
     | _ when is_function expr -> Some (stub_body ~loc ~outer_refs ~kept_bindings:Scope.String_set.empty name expr)
     | _ -> None
 
-  let rec anonymous_name expr =
-    match expr.pexp_desc with
-    | Pexp_constraint (expr, _) | Pexp_coerce (expr, _, _) | Pexp_newtype (_, expr) -> anonymous_name expr
-    | Pexp_function (params, _, _) -> (
-        match
-          List.find_map
-            (fun param -> match param.pparam_desc with Pparam_val (_, _, pattern) -> Some pattern | _ -> None)
-            params
-        with
-        | Some pattern -> function_name pattern
-        | None -> unknown_name)
-    | _ -> unknown_name
-
   let alert_melange_only ~loc =
     let message =
       "This value only exists in the Melange build. Use it inside a let%melange_only function, or a Melange branch of \
@@ -194,6 +193,18 @@ module Melange_only = struct
                (Builder.pexp_apply ~loc (Builder.evar ~loc melange_only) [ (Nolabel, Builder.estring ~loc message) ])
                [];
            ])
+
+  let add_alert ~loc =
+    object
+      inherit Ast_traverse.map as super
+
+      method! pattern pattern =
+        let pattern = super#pattern pattern in
+        match pattern.ppat_desc with
+        | Ppat_var _ | Ppat_alias _ ->
+            { pattern with ppat_attributes = pattern.ppat_attributes @ [ alert_melange_only ~loc ] }
+        | _ -> pattern
+    end
 
   let warning_unused_value ~loc =
     Builder.attribute ~loc ~name:{ txt = "warning"; loc }
@@ -216,11 +227,11 @@ module Melange_only = struct
         | None -> Builder.value_binding ~loc ~pat:pattern ~expr:(error_only_works_on ~loc)
         | Some expr when top_level ->
             let expr = { expr with pexp_attributes = expr.pexp_attributes @ [ remove_alert_only ~loc ] } in
-            let pat = { pattern with ppat_attributes = [ alert_melange_only ~loc ] } in
+            let pat = (add_alert ~loc)#pattern pattern in
             { (Builder.value_binding ~loc ~pat ~expr) with pvb_attributes = warning_unused_value ~loc :: attributes }
         | Some expr ->
             {
-              (Builder.value_binding ~loc ~pat:pattern ~expr) with
+              (Builder.value_binding ~loc ~pat:((add_alert ~loc)#pattern pattern) ~expr) with
               pvb_attributes = remove_alert_only ~loc :: attributes;
             })
 
@@ -283,11 +294,12 @@ module Melange_only = struct
                   match rec_flag with Recursive -> Scope.add_value_bindings vbs locals | Nonrecursive -> locals
                 in
                 let vbs' = List.map (stub_value_binding ~top_level:false ~locals:vb_locals) vbs in
+                local_stubs := Scope.add_value_bindings vbs !local_stubs;
                 let body' = self#expression (Scope.add_value_bindings vbs locals) body in
                 Builder.pexp_let ~loc rec_flag vbs' body'
             | Native, PStr [ { pstr_desc = Pstr_eval (payload, []); _ } ] -> (
                 let outer_refs = Scope.collect_free_in_expr ~outer:locals payload in
-                match stub ~loc ~outer_refs (anonymous_name payload) payload with
+                match stub ~loc ~outer_refs (location_name loc) payload with
                 | Some stubbed -> stubbed
                 | None -> error_only_works_on ~loc)
             | _ -> error_only_works_on ~loc)
@@ -375,7 +387,9 @@ module Melange_only = struct
         | _ -> super#class_expr locals ce
     end
 
-  let traverse structure = mapper#structure Scope.String_set.empty structure
+  let traverse structure =
+    local_stubs := Scope.String_set.empty;
+    mapper#structure Scope.String_set.empty structure
 end
 
 module Preprocess = struct
@@ -389,13 +403,15 @@ module Preprocess = struct
     | Js when String.equal name native_only -> `drop
     | _ -> `keep
 
+  let dropped_name attrs =
+    match List.find_opt (fun attr -> eval_attr attr = `drop) attrs with Some attr -> attr.attr_name.txt | None -> ""
+
   let expression_error ~loc attrs =
-    let name =
-      match List.find_opt (fun attr -> eval_attr attr = `drop) attrs with Some attr -> attr.attr_name.txt | None -> ""
-    in
     [%expr
       [%ocaml.error
-        [%e Builder.estring ~loc (Printf.sprintf "Don't use %s on expressions, use switch%%platform instead" name)]]]
+        [%e
+          Builder.estring ~loc
+            (Printf.sprintf "Don't use %s on expressions, use switch%%platform instead" (dropped_name attrs))]]]
 
   let evaluated : (Location.t, unit) Hashtbl.t = Hashtbl.create 16
 
@@ -500,6 +516,21 @@ module Preprocess = struct
         Some (Builder.psig_extension ~loc:attr.attr_loc (floating_error ~loc:attr.attr_loc attr) [])
     | Psig_extension _ | Psig_attribute _ -> Some sigi
 
+  let case_pattern =
+    object
+      inherit Ast_traverse.map as super
+
+      method! pattern pat =
+        let pat = super#pattern pat in
+        if should_keep pat.ppat_attributes = `keep then pat
+        else
+          let loc = pat.ppat_loc in
+          Builder.ppat_extension ~loc
+            (error_extension ~loc
+               (Printf.sprintf "Don't use %s on match case patterns, use switch%%platform instead"
+                  (dropped_name pat.ppat_attributes)))
+    end
+
   let traverse =
     object (self : Ast_traverse.map)
       inherit Ast_traverse.map as super
@@ -601,9 +632,9 @@ module Preprocess = struct
                             ] );
                   }
               | _ -> expr)
-        | _, Pexp_open (od, body)
-          when should_keep expr.pexp_attributes = `drop || should_keep od.popen_attributes = `drop ->
-            self#expression body
+        | _, Pexp_open (od, _) when should_keep expr.pexp_attributes = `drop || should_keep od.popen_attributes = `drop
+          ->
+            expression_error ~loc:expr.pexp_loc (expr.pexp_attributes @ od.popen_attributes)
         | _ -> (
             let expr = super#expression expr in
             let loc = expr.pexp_loc in
@@ -613,6 +644,13 @@ module Preprocess = struct
                 if should_keep attrs = `keep then expr else expression_error ~loc attrs
             | _ -> if should_keep expr.pexp_attributes = `keep then expr else expression_error ~loc expr.pexp_attributes
             )
+
+      method! case case =
+        {
+          pc_lhs = case_pattern#pattern case.pc_lhs;
+          pc_guard = Option.map self#expression case.pc_guard;
+          pc_rhs = self#expression case.pc_rhs;
+        }
 
       method! pattern pat =
         match pat.ppat_desc with

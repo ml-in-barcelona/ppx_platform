@@ -265,7 +265,8 @@ Pstr_class_type
     method get : int
   end
 
-Pexp_open
+Pexp_open with a platform attribute is an error in the build that drops it, as
+on other expressions:
 
   $ cat > input_pexp_open.ml << EOF
   > let f () =
@@ -277,9 +278,10 @@ Pexp_open
   $ ./standalone.exe -impl input_pexp_open.ml | ocamlformat - --enable-outside-detected-project --impl
   let f () =
     let open Unix in
-    42
+    [%ocaml.error
+      "Don't use melange_only on expressions, use switch%platform instead"]
 
   $ ./standalone.exe -impl input_pexp_open.ml -js | ocamlformat - --enable-outside-detected-project --impl
   let f () =
-    let open Webapi.Dom in
-    42
+    [%ocaml.error
+      "Don't use native_only on expressions, use switch%platform instead"]
